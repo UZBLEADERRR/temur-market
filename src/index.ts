@@ -1,4 +1,5 @@
 import { webhookCallback } from 'grammy';
+import { run, type RunnerHandle } from '@grammyjs/runner';
 import { assertProductionEnv, env } from './config/env';
 import { connectDatabase, disconnectDatabase } from './database/connection';
 import { SettingsService } from './services/settings';
@@ -38,6 +39,7 @@ async function main() {
   registerBusinessHandlers(bot, app);
   registerAdminHandlers(bot, app);
 
+  let runner: RunnerHandle | undefined;
   const useWebhook = env.BOT_MODE === 'webhook' && Boolean(env.publicUrl);
   const web = createWebApp(app, (e) => {
     if (useWebhook) {
@@ -77,8 +79,8 @@ async function main() {
     logger.info('Webhook mode');
   } else {
     await bot.api.deleteWebhook().catch(() => undefined);
-    void bot.start({ allowed_updates: [...ALLOWED_UPDATES], drop_pending_updates: false });
-    logger.info('Long polling mode');
+    runner = run(bot, { runner: { fetch: { allowed_updates: [...ALLOWED_UPDATES] } }, sink: { concurrency: 50 } });
+    logger.info('Long polling mode (concurrent runner)');
   }
 
   // background jobs: reminders + retry of AI failures / unfinished processing after restarts
@@ -91,7 +93,7 @@ async function main() {
     logger.info({ signal }, 'Shutting down');
     jobs.forEach(clearInterval);
     engine.stopAll();
-    if (!useWebhook) await bot.stop().catch(() => undefined);
+    if (runner?.isRunning()) await runner.stop().catch(() => undefined);
     server.close();
     await disconnectDatabase().catch(() => undefined);
     process.exit(0);
@@ -99,6 +101,14 @@ async function main() {
   process.once('SIGINT', () => void shutdown('SIGINT'));
   process.once('SIGTERM', () => void shutdown('SIGTERM'));
 }
+
+// never let one bad request take the whole bot down
+process.on('unhandledRejection', (reason) => {
+  logger.error({ err: reason instanceof Error ? reason.message : String(reason) }, 'Unhandled promise rejection');
+});
+process.on('uncaughtException', (err) => {
+  logger.error({ err: err.message, stack: err.stack }, 'Uncaught exception');
+});
 
 main().catch((err) => {
   logger.fatal({ err: (err as Error).message }, 'Fatal startup error');

@@ -80,6 +80,7 @@ export function createWebApp(app: AppContext, extra?: (e: express.Express) => vo
           status: l.status,
           mode: l.mode,
           urgent: l.urgent,
+          alwaysOn: l.alwaysOn,
           bmi: l.bmi,
           answers: l.answers,
           readyAt: l.readyAt,
@@ -118,6 +119,40 @@ export function createWebApp(app: AppContext, extra?: (e: express.Express) => vo
       if (mode === 'MANUAL') app.engine.cancel(String(req.params.id));
       const lead = await app.leads.setMode(String(req.params.id), mode, req.adminId);
       res.json({ ok: Boolean(lead) });
+    }),
+  );
+
+  /** "Ma'lumotlarni tozalash": answers and chat history are deleted, the client starts from zero. */
+  api.post(
+    '/leads/:id/reset',
+    asyncH(async (req, res) => {
+      res.json({ ok: await app.engine.resetLead(String(req.params.id)) });
+    }),
+  );
+
+  /** AI always on for this client (does not stop after the questionnaire or the coach's messages). */
+  api.post(
+    '/leads/:id/always-on',
+    asyncH(async (req, res) => {
+      const on = Boolean(req.body?.on);
+      const lead = await Lead.findById(req.params.id);
+      if (!lead) return res.status(404).json({ error: 'not found' });
+      lead.alwaysOn = on;
+      if (on) lead.mode = 'AI';
+      await lead.save();
+      await AdminEvent.create({ type: on ? 'always_on' : 'always_off', leadId: lead._id, actorId: req.adminId });
+      res.json({ ok: true });
+    }),
+  );
+
+  api.delete(
+    '/leads/:id',
+    asyncH(async (req, res) => {
+      app.engine.cancel(String(req.params.id));
+      await Message.deleteMany({ leadId: req.params.id });
+      await Lead.deleteOne({ _id: req.params.id });
+      await AdminEvent.create({ type: 'lead_deleted', actorId: req.adminId, data: { leadId: req.params.id } });
+      res.json({ ok: true });
     }),
   );
 

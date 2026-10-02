@@ -196,3 +196,14 @@ describe('anonymizer word awareness', () => {
     expect(anonymize('Привет, Алишер', { names: ['Алишер'] })).toBe('Привет, [ism]');
   });
 });
+
+describe('greeting detection and turkish letters', async () => {
+  const { isGreetingOnly, normalize } = await import('../src/utils/text');
+  it('works', () => {
+    expect(isGreetingOnly('Assalomu alaykum aka')).toBe(true);
+    expect(isGreetingOnly('Salom yaxshimisiz?')).toBe(true);
+    expect(isGreetingOnly('Привет')).toBe(true);
+    expect(isGreetingOnly('Salom, ozmoqchiman')).toBe(false);
+    expect(normalize('ozğin')).toBe("ozg'in");
+  });
+});

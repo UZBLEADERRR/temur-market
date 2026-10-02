@@ -1,7 +1,7 @@
 import { Types } from 'mongoose';
 import { Lead, type LeadDoc } from '../database/models/Lead';
 import { Message } from '../database/models/Message';
-import { AdminEvent } from '../database/models/misc';
+import { AdminEvent, Reminder } from '../database/models/misc';
 import type { AiService } from '../ai/aiService';
 import { buildSystem, buildUserText } from '../ai/promptBuilder';
 import { stripMarkers, type AiResponse } from '../ai/responseSchema';
@@ -15,7 +15,7 @@ import type { SettingsService } from '../services/settings';
 import { retrieveExamples } from '../style/examples';
 import { isChatClosedError, type TelegramGateway } from '../telegram/gateway';
 import type { LeadAnswers, LeadStatus, QuestionStep, ReadyReason } from '../types/domain';
-import { containsAny, detectLanguage, escapeHtml, normalize, splitKeywords, type Lang } from '../utils/text';
+import { containsAny, detectLanguage, escapeHtml, isGreetingOnly, normalize, splitKeywords, type Lang } from '../utils/text';
 import { KeyedMutex } from '../utils/limiter';
 import { sleep } from '../utils/time';
 import { logger } from '../utils/logger';
@@ -34,6 +34,7 @@ export interface IncomingClientMessage {
   text: string;
   kind: 'text' | 'voice' | 'photo' | 'video' | 'sticker' | 'other';
   voice?: { fileId: string; mimeType?: string };
+  photo?: { fileId: string };
   date?: Date;
 }
 
@@ -47,8 +48,8 @@ export interface EngineOptions {
 
 const ACTIVE_STATUSES: LeadStatus[] = ['NEW', 'QUESTIONNAIRE'];
 
-export function isAiActive(lead: { mode?: string | null; status?: string | null }): boolean {
-  return lead.mode === 'AI' && ACTIVE_STATUSES.includes(lead.status as LeadStatus);
+export function isAiActive(lead: { mode?: string | null; status?: string | null; alwaysOn?: boolean | null }): boolean {
+  return lead.mode === 'AI' && (ACTIVE_STATUSES.includes(lead.status as LeadStatus) || Boolean(lead.alwaysOn));
 }
 
 /**
@@ -120,7 +121,12 @@ export class ConversationEngine {
       text,
       processed: !active,
       // voice is transcribed when the batch is processed, so the Telegram update loop is never blocked
-      meta: msg.kind === 'voice' && msg.voice ? { voiceFileId: msg.voice.fileId, mimeType: msg.voice.mimeType } : undefined,
+      meta:
+        msg.kind === 'voice' && msg.voice
+          ? { voiceFileId: msg.voice.fileId, mimeType: msg.voice.mimeType }
+          : msg.photo
+            ? { photoFileId: msg.photo.fileId }
+            : undefined,
     });
     const isFirst = !lead.lastClientMessageAt;
     lead.lastClientMessageAt = now;
@@ -164,6 +170,12 @@ export class ConversationEngine {
 
   /** Marks a chat as handled by the coach (manual message from Telegram or from the mini app). */
   async takeover(lead: LeadDoc, why: string): Promise<void> {
+    if (lead.alwaysOn) {
+      // AI stays on by admin decision; the coach's message just becomes part of the history
+      lead.lastOutgoingAt = this.now();
+      await lead.save();
+      return;
+    }
     this.cancel(String(lead._id));
     const wasAi = lead.mode === 'AI';
     lead.mode = 'MANUAL';
@@ -235,6 +247,30 @@ export class ConversationEngine {
       await lead.save();
       return;
     }
+    // spam / flood protection: too many messages in a short time → AI steps back, the coach decides
+    const floodLimit = await this.deps.settings.num('flood_limit');
+    const recentCount = await Message.countDocuments({
+      leadId: lead._id,
+      sender: 'client',
+      createdAt: { $gte: new Date(this.now().getTime() - 5 * 60_000) },
+    });
+    if (floodLimit > 0 && recentCount > floodLimit) {
+      await Message.updateMany({ leadId: lead._id, processed: false }, { $set: { processed: true } });
+      lead.mode = 'MANUAL';
+      lead.readyReason = 'flood';
+      lead.pendingSince = undefined;
+      await lead.save();
+      await AdminEvent.create({ type: 'flood', leadId: lead._id, data: { recentCount } });
+      await this.deps.gateway
+        .notifyAdmins(`⚠️ Juda ko'p xabar (${recentCount} ta / 5 daqiqa) — AI shu chatda to'xtadi: <a href="tg://user?id=${lead.telegramId}">${escapeHtml(displayName(lead))}</a>`)
+        .catch(() => undefined);
+      return;
+    }
+    // only the latest messages of a big batch matter (spam, 20 photos in a row…)
+    if (pending.length > 15) {
+      await Message.updateMany({ _id: { $in: pending.slice(0, pending.length - 15).map((m) => m._id) } }, { $set: { processed: true } });
+      pending.splice(0, pending.length - 15);
+    }
     for (const m of pending) {
       const meta = m.meta as { voiceFileId?: string; mimeType?: string } | undefined;
       if (m.kind === 'voice' && !m.text && meta?.voiceFileId) {
@@ -247,7 +283,18 @@ export class ConversationEngine {
       }
     }
     const pendingIds = pending.map((m) => m._id);
-    const newText = pending.map((m) => m.text).filter(Boolean).join('\n');
+    const newText = pending.map((m) => m.text).filter(Boolean).join('\n').slice(0, 3000);
+    const photoIds = pending
+      .map((m) => (m.meta as { photoFileId?: string } | undefined)?.photoFileId)
+      .filter((x): x is string => Boolean(x));
+    // stickers / emoji only and nothing to look at → nothing to answer
+    const meaningful = pending.some((m) => m.kind === 'photo' || /\p{L}|\d/u.test(m.text.replace(/^\[(stiker|fayl|video)\]$/, '')));
+    if (!meaningful) {
+      await Message.updateMany({ _id: { $in: pendingIds } }, { $set: { processed: true } });
+      lead.pendingSince = undefined;
+      await lead.save();
+      return;
+    }
     const lang: Lang = detectLanguage(newText) ?? (lead.language as Lang) ?? 'uz';
     lead.language = lang;
 
@@ -297,7 +344,7 @@ export class ConversationEngine {
       const askIntent = await this.deps.settings.bool('ask_intent');
       if (courseSignal || !askIntent) {
         lead.intent = 'course';
-        if (!gaveBasics) {
+        if (!gaveBasics && isGreetingOnly(newText) && !photoIds.length) {
           lead.answers = answers as never;
           lead.currentQuestion = 1;
           lead.lastAskedStep = 1;
@@ -307,7 +354,10 @@ export class ConversationEngine {
           await this.sendToClient(lead, [await this.deps.settings.text('first_message', lang)]);
           return;
         }
-      } else {
+        // the client already wrote something meaningful → the model answers it and moves to question 1
+        if (!gaveBasics) lead.lastAskedStep = 0;
+      } else if (isGreetingOnly(newText) && !photoIds.length) {
+        // only "Salom" — ask what it is about
         lead.intent = 'asked';
         lead.lastAskedStep = 0;
         lead.askCount = 1;
@@ -315,16 +365,24 @@ export class ConversationEngine {
         await lead.save();
         await this.sendToClient(lead, [await this.deps.settings.text('intent_question', lang)]);
         return;
+      } else {
+        // a real message without obvious keywords → the model decides whether it is about the course
+        lead.intent = 'asked';
+        lead.lastAskedStep = 0;
+        lead.askCount = 0;
       }
     }
     if (lead.intent === 'asked' && courseSignal) lead.intent = 'course';
 
     // 4) LLM turn
+    if (lead.alwaysOn && !ACTIVE_STATUSES.includes(lead.status as LeadStatus)) {
+      return this.coachModeTurn(lead, pending.map((m) => m.text), photoIds, lang, markProcessed);
+    }
     const bmiPre = calcBmi(answers.weight, answers.height);
     const step = nextStep(answers, (lead.skippedSteps ?? []) as number[]);
     let ai: AiResponse;
     try {
-      ai = await this.askAi(lead, answers, step, bmiPre, lang, pending.map((m) => m.text), (lead.lastAskedStep ?? stepBefore) as QuestionStep);
+      ai = await this.askAi(lead, answers, step, bmiPre, lang, pending.map((m) => m.text), (lead.lastAskedStep ?? stepBefore) as QuestionStep, photoIds);
     } catch (err) {
       await this.onAiFailure(lead, err as Error);
       return;
@@ -357,6 +415,7 @@ export class ConversationEngine {
         // still unclear: one clarifying question, then hand the chat to the coach
         await markProcessed();
         if ((lead.askCount ?? 0) >= 2) return this.stopNotLead(lead, newText);
+        if ((lead.askCount ?? 0) === 0 && !messages.length) messages.push(await this.deps.settings.text('intent_question', outLang));
         lead.askCount = (lead.askCount ?? 0) + 1;
         await lead.save();
         await this.sendToClient(lead, messages.length ? messages.slice(0, 2) : [await this.deps.settings.text('intent_question', outLang)]);
@@ -437,7 +496,11 @@ export class ConversationEngine {
 
     // ASK_NEXT — trust the model's wording; correct it only when it asks the wrong question
     const recentAi = await this.recentAiTexts(lead, 4);
-    const canonical = stripLeadingAck(await questionText(after, outLang, lead.bmi ?? undefined, this.deps.settings));
+    // the very first bot message keeps the greeting of the fixed first message
+    const canonical =
+      after === 1 && recentAi.length === 0
+        ? await this.deps.settings.text('first_message', outLang)
+        : stripLeadingAck(await questionText(after, outLang, lead.bmi ?? undefined, this.deps.settings));
     const bandChanged =
       after === 2 &&
       ai.question === 2 &&
@@ -449,7 +512,7 @@ export class ConversationEngine {
     if (askedWrong || bandChanged || (!alreadyAsked && !out.some((m) => m.includes('?')))) {
       // keep the model's side answer, then ask the expected question with a fresh acknowledgement
       const side = out.filter((m) => !m.includes('?') && !isBareAck(m));
-      const ack = side.length ? '' : pickAck(await this.deps.settings.text('ack_words', outLang), recentAi, (lead.askCount ?? 0) + after + recentAi.length);
+      const ack = side.length || recentAi.length === 0 ? '' : pickAck(await this.deps.settings.text('ack_words', outLang), recentAi, (lead.askCount ?? 0) + after + recentAi.length);
       out = [...side.slice(0, 2), ack ? `${ack}. ${canonical}` : canonical];
     }
     // never send the exact same text twice in a row
@@ -477,6 +540,8 @@ export class ConversationEngine {
     lang: Lang,
     newMessages: string[],
     askedStep: QuestionStep,
+    photoIds: string[] = [],
+    coachMode = false,
   ): Promise<AiResponse> {
     const s = this.deps.settings;
     const historyLimit = await s.num('history_messages');
@@ -489,7 +554,8 @@ export class ConversationEngine {
     const remaining: Array<{ step: number; text: string }> = [];
     for (let i = step; i <= 5; i++) {
       if (missingFields(answers, i as 1 | 2 | 3 | 4 | 5).length === 0) continue;
-      remaining.push({ step: i, text: await questionText(i as QuestionStep, lang, bmi, s) });
+      const firstContact = i === 1 && !(await Message.exists({ leadId: lead._id, sender: 'ai' }));
+      remaining.push({ step: i, text: firstContact ? await s.text('first_message', lang) : await questionText(i as QuestionStep, lang, bmi, s) });
     }
     const queryForExamples = `${newMessages.join(' ')} ${remaining[0]?.text ?? ''}`;
     const examples = await retrieveExamples(queryForExamples, lang, await s.num('examples_per_request'), lead.telegramId % 1000);
@@ -513,12 +579,16 @@ export class ConversationEngine {
       results: await s.get('coach_results'),
       ackWords: await s.text('ack_words', lang),
       intentPending: lead.intent === 'asked',
+      coachMode,
+      allowAdvice: await s.bool('allow_advice'),
+      photos: photoIds.length,
       lastAiMessages: (await this.recentAiTexts(lead, 3)).reverse(),
       summary: lead.summary,
       history,
       newMessages,
     };
-    return this.deps.ai.reply(buildSystem(input), buildUserText(input), { leadId: String(lead._id), step });
+    const images = await this.loadImages(photoIds);
+    return this.deps.ai.reply(buildSystem(input), buildUserText(input), { leadId: String(lead._id), step }, images);
   }
 
   private async onAiFailure(lead: LeadDoc, err: Error): Promise<void> {
@@ -546,7 +616,7 @@ export class ConversationEngine {
     await lead.save();
     // the final message is the only one allowed after the decision; mode flips right after it
     await this.sendToClient(lead, Array.isArray(text) ? text : [text], { final: true });
-    lead.mode = 'MANUAL';
+    lead.mode = lead.alwaysOn && !urgent ? 'AI' : 'MANUAL';
     await lead.save();
     this.cancel(String(lead._id));
     await AdminEvent.create({ type: urgent ? 'tayyor_ehtiyot' : 'tayyor', leadId: lead._id, data: { reason } });
@@ -569,6 +639,41 @@ export class ConversationEngine {
         `💬 Kurs bo'yicha emas (AI to'xtadi): <a href="tg://user?id=${lead.telegramId}">${escapeHtml(displayName(lead))}</a>${lead.username ? ' @' + escapeHtml(lead.username) : ''}\n<i>${escapeHtml(text.slice(0, 300))}</i>`,
       )
       .catch(() => undefined);
+  }
+
+  /** After the questionnaire, for "always on" clients: free conversation as the coach's assistant. */
+  private async coachModeTurn(lead: LeadDoc, newMessages: string[], photoIds: string[], lang: Lang, markProcessed: () => Promise<void>): Promise<void> {
+    let ai: AiResponse;
+    try {
+      ai = await this.askAi(lead, plainAnswers(lead), 6, lead.bmi ?? undefined, lang, newMessages, 6, photoIds, true);
+    } catch (err) {
+      await this.onAiFailure(lead, err as Error);
+      return;
+    }
+    await markProcessed();
+    if (ai.action === 'URGENT_READY') {
+      lead.alwaysOn = false;
+      return this.finishReady(lead, 'safety', true, await this.deps.settings.text('ready_message', lang));
+    }
+    await lead.save();
+    const recent = new Set((await this.recentAiTexts(lead, 4)).map(normalize));
+    const out = ai.messages.map((m) => stripMarkers(m).text).filter((m) => m && !recent.has(normalize(m)));
+    if (ai.action !== 'NO_RESPONSE' && out.length) await this.sendToClient(lead, out.slice(0, 3), { final: true });
+  }
+
+  /** Downloads up to N client photos for the model to look at (body photos, food, screenshots). */
+  private async loadImages(photoIds: string[]): Promise<Array<{ mimeType: string; data: string }>> {
+    const max = await this.deps.settings.num('max_images_per_turn');
+    const out: Array<{ mimeType: string; data: string }> = [];
+    for (const id of photoIds.slice(-Math.max(0, max))) {
+      try {
+        const buf = await this.deps.gateway.downloadFile(id);
+        if (buf.length > 0 && buf.length < 5 * 1024 * 1024) out.push({ mimeType: 'image/jpeg', data: buf.toString('base64') });
+      } catch (err) {
+        logger.warn({ err: (err as Error).message }, 'Photo download failed');
+      }
+    }
+    return out;
   }
 
   private async recentAiTexts(lead: LeadDoc, n: number): Promise<string[]> {
@@ -660,6 +765,28 @@ export class ConversationEngine {
       transcript.slice(0, 8000),
     );
     await Lead.updateOne({ _id: lead._id }, { $set: { summary: summary.slice(0, 1500), summaryMessageCount: total } });
+  }
+
+  /** Admin "clear data": the client starts from zero as if they wrote for the first time. */
+  async resetLead(leadId: string): Promise<boolean> {
+    this.cancel(leadId);
+    const lead = await Lead.findById(leadId);
+    if (!lead) return false;
+    await Message.deleteMany({ leadId: lead._id });
+    await Reminder.deleteMany({ leadId: lead._id });
+    await Lead.updateOne(
+      { _id: lead._id },
+      {
+        $set: { answers: {}, status: 'NEW', mode: 'AI', urgent: false, remindersSent: 0, aiFailures: 0, askCount: 0, skippedSteps: [], currentQuestion: 1, adminCardMessageIds: [] },
+        $unset: {
+          intent: '', bmi: '', targetBmi: '', readyReason: '', summary: '', summaryMessageCount: '', lastAskedStep: '', pendingSince: '',
+          lastClientMessageAt: '', lastOutgoingAt: '', readyAt: '', answeredAt: '', paidAt: '', rejectedAt: '', aiFailureNotifiedAt: '',
+        },
+      },
+    );
+    await AdminEvent.create({ type: 'lead_reset', leadId: lead._id });
+    logger.info({ leadId }, 'Lead data cleared by admin');
+    return true;
   }
 
   /** Leads whose processing failed (AI down) or was interrupted by a restart. */

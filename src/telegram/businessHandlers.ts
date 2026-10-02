@@ -72,6 +72,8 @@ export function registerBusinessHandlers(bot: Bot, app: AppContext): void {
     }
 
     const voice = m.voice ?? m.audio;
+    // pick a mid-size photo (enough for the model, small to download)
+    const photo = m.photo?.length ? ([...m.photo].reverse().find((p) => (p.file_size ?? 0) <= 1_500_000) ?? m.photo[0]) : undefined;
     await app.engine.handleClientMessage({
       connectionId,
       chat,
@@ -79,6 +81,7 @@ export function registerBusinessHandlers(bot: Bot, app: AppContext): void {
       text,
       kind: kindOf(m),
       voice: voice ? { fileId: voice.file_id, mimeType: voice.mime_type } : undefined,
+      photo: photo ? { fileId: photo.file_id } : undefined,
       date: new Date(m.date * 1000),
     });
   });

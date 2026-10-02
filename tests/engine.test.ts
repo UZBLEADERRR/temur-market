@@ -133,6 +133,7 @@ describe('questionnaire flow', () => {
   it('9. "Botmisiz?" → honest answer, AI stops, card sent', async () => {
     const { engine, gateway, llm } = buildApp();
     await engine.handleClientMessage(clientMsg(17, 'Salom, kurs haqida'));
+    const callsBefore = llm.calls.filter((c) => c.json).length;
     await engine.handleClientMessage(clientMsg(17, 'Botmisiz?'));
     expect(gateway.textsTo(17).at(-1)).toBe(
       "Ha, savollarga AI-yordamchim javob beryapti, lekin hammasini o'zim ko'rib turibman. Hozir o'zim yozaman.",
@@ -141,7 +142,7 @@ describe('questionnaire flow', () => {
     expect(lead?.status).toBe('READY');
     expect(lead?.mode).toBe('MANUAL');
     expect(lead?.readyReason).toBe('bot_question');
-    expect(llm.calls.filter((c) => c.json)).toHaveLength(0); // handled by backend rule
+    expect(llm.calls.filter((c) => c.json)).toHaveLength(callsBefore); // handled by backend rule
   });
 
   it('9b. model-detected bot question (no keyword) is also handled honestly', async () => {
@@ -448,5 +449,108 @@ describe('human-like behaviour', () => {
     await engine.handleClientMessage(clientMsg(76, "Kurs uchun: 175 80 30, 1 yil, ozish, 3 kun uyda, oldin urinmaganman, sog'man"));
     expect(gateway.textsTo(76)).toEqual(["Rahmat, hammasi tushunarli 👍", "Hozir o'zim batafsil yozaman"]);
     expect((await Lead.findOne({ chatId: 76 }))?.status).toBe('READY');
+  });
+});
+
+describe('intent, photos, spam, always-on, reset', () => {
+  it('screenshot case: "ozğin edim, semirishim kerak, maslahat berasizmi" is about the course → no intent question', async () => {
+    const { engine, gateway, llm } = buildApp();
+    llm.push((req) => {
+      expect(req.parts.at(-1)!.text).not.toContain('MAQSAD ANIQLANMAGAN');
+      return {
+        messages: ['Va alaykum assalom aka', "Semirish ham to'g'ri tizim bilan bo'ladi, muntazam ovqat va kuch mashqlari kerak", "O'zingiz haqingizda yozing: bo'y, ves, yosh, trenirovka tajribangiz bormi?"],
+        action: 'ASK_NEXT',
+        question: 1,
+      };
+    });
+    await engine.handleClientMessage(clientMsg(80, 'Assolomu alaykum aka yaxshimisiz, menga yordamiz kerak edi, men juda ozğin edim, semirishim kerak, maslahat berasizmi'));
+    const texts = gateway.textsTo(80);
+    expect(texts.some((t) => t.includes("Kurs bo'yicha"))).toBe(false);
+    expect(texts.at(-1)).toContain("bo'y, ves, yosh");
+    expect((await Lead.findOne({ chatId: 80 }))?.intent).toBe('course');
+  });
+
+  it('a meaningful message without keywords is classified by the model (other → silent stop)', async () => {
+    const { engine, gateway, llm } = buildApp();
+    llm.push((req) => {
+      expect(req.parts.at(-1)!.text).toContain('MAQSAD ANIQLANMAGAN');
+      return { messages: [], action: 'NOT_LEAD', intent: 'other' };
+    });
+    await engine.handleClientMessage(clientMsg(81, 'Aka mashinangizni sotasizmi?'));
+    expect(gateway.textsTo(81)).toHaveLength(0);
+    expect((await Lead.findOne({ chatId: 81 }))?.mode).toBe('MANUAL');
+  });
+
+  it('a meaningful but unclear first message gets the intent question once', async () => {
+    const { engine, gateway, llm } = buildApp();
+    llm.push({ messages: [], action: 'ASK_NEXT', intent: 'unclear' });
+    await engine.handleClientMessage(clientMsg(82, 'Aka bir narsa so\'ramoqchi edim'));
+    expect(gateway.textsTo(82)).toEqual(["Assalomu alaykum! Kurs bo'yicha yozyapsizmi yoki boshqa masalada?"]);
+  });
+
+  it('body photos are shown to the model as images', async () => {
+    const { engine, gateway, llm } = buildApp();
+    await engine.handleClientMessage(clientMsg(83, 'Salom, kurs haqida'));
+    llm.push((req) => {
+      expect(req.parts.filter((p) => p.inlineData)).toHaveLength(2);
+      expect(req.parts.at(-1)!.text).toContain('2 ta rasm yubordi');
+      return { messages: ["Rasmlarni ko'rdim, yaxshi asos bor", "Bo'y, ves, yoshingizni ham yozib yuboring"], action: 'ASK_NEXT', question: 1 };
+    });
+    (engine as unknown as { opts: { debounceMsOverride: number } }).opts.debounceMsOverride = 60_000;
+    await engine.handleClientMessage(clientMsg(83, '', { kind: 'photo', photo: { fileId: 'p1' } }));
+    await engine.handleClientMessage(clientMsg(83, '', { kind: 'photo', photo: { fileId: 'p2' } }));
+    const lead = await Lead.findOne({ chatId: 83 });
+    engine.cancel(String(lead!._id));
+    await engine.process(String(lead!._id));
+    expect(gateway.textsTo(83).at(-1)).toContain('yoshingizni');
+  });
+
+  it('stickers/emoji only → no reply; a flood of messages → AI steps back', async () => {
+    const { engine, gateway, settings } = buildApp();
+    await engine.handleClientMessage(clientMsg(84, 'Salom, kurs haqida'));
+    const n = gateway.sent.length;
+    await engine.handleClientMessage(clientMsg(84, '', { kind: 'sticker' }));
+    await engine.handleClientMessage(clientMsg(84, '😂😂😂'));
+    expect(gateway.sent.length).toBe(n);
+
+    await settings.set({ flood_limit: 5 });
+    for (let i = 0; i < 6; i++) await engine.handleClientMessage(clientMsg(85, `spam ${i} kurs`));
+    const lead = await Lead.findOne({ chatId: 85 });
+    expect(lead?.mode).toBe('MANUAL');
+    expect(lead?.readyReason).toBe('flood');
+  });
+
+  it('always-on: AI keeps answering after the questionnaire and after the coach writes', async () => {
+    const { engine, gateway, llm } = buildApp();
+    await engine.handleClientMessage(clientMsg(86, 'Salom, kurs haqida'));
+    await Lead.updateOne({ chatId: 86 }, { $set: { alwaysOn: true } });
+    await engine.handleClientMessage(clientMsg(86, 'Temur bilan gaplashmoqchiman'));
+    let lead = await Lead.findOne({ chatId: 86 });
+    expect(lead?.status).toBe('READY');
+    expect(lead?.mode).toBe('AI');
+    await engine.handleCoachMessage({ connectionId: 'conn-1', chat: { id: 86 }, messageId: 5555, text: 'Salom', kind: 'text' });
+    expect((await Lead.findOne({ chatId: 86 }))?.mode).toBe('AI');
+    llm.push((req) => {
+      expect(req.parts.at(-1)!.text).toContain('REJIM: anketa tugagan');
+      return { messages: ["Oqsilni ko'proq yeng, uyquga e'tibor bering"], action: 'ASK_NEXT' };
+    });
+    await engine.handleClientMessage(clientMsg(86, 'Qanday ovqatlanay?'));
+    expect(gateway.textsTo(86).at(-1)).toBe("Oqsilni ko'proq yeng, uyquga e'tibor bering");
+    lead = await Lead.findOne({ chatId: 86 });
+    expect(lead?.mode).toBe('AI');
+  });
+
+  it('reset clears answers and history; the bot starts from zero', async () => {
+    const { engine, gateway } = buildApp();
+    await engine.handleClientMessage(clientMsg(87, 'Salom, kurs haqida'));
+    await engine.handleClientMessage(clientMsg(87, 'Temur bilan gaplashmoqchiman'));
+    const lead = await Lead.findOne({ chatId: 87 });
+    expect(await engine.resetLead(String(lead!._id))).toBe(true);
+    const fresh = await Lead.findOne({ chatId: 87 });
+    expect(fresh?.status).toBe('NEW');
+    expect(fresh?.mode).toBe('AI');
+    expect(await Message.countDocuments({ leadId: lead!._id })).toBe(0);
+    await engine.handleClientMessage(clientMsg(87, 'Salom, kurs haqida'));
+    expect(gateway.textsTo(87).at(-1)).toBe(FIRST);
   });
 });

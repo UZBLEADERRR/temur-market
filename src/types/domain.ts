@@ -12,7 +12,8 @@ export type ReadyReason =
   | 'low_target_bmi'
   | 'manual_takeover'
   | 'paused'
-  | 'not_lead';
+  | 'not_lead'
+  | 'flood';
 
 export interface LeadAnswers {
   height?: number;

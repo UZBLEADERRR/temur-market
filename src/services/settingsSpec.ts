@@ -133,6 +133,9 @@ export const SETTINGS_SPEC: SettingDef[] = [
     'Здравствуйте. Ответьте, пожалуйста, на вопросы, потом сам всё подробно расскажу',
   ),
 
+  { key: 'allow_advice', label: "Umumiy murabbiy maslahatlari berishi mumkin", group: 'Xulq', type: 'boolean', default: true },
+  { key: 'flood_limit', label: "Spam himoyasi: 5 daqiqada maksimum xabar (oshsa AI to'xtaydi)", group: 'Xulq', type: 'number', default: 40 },
+  { key: 'max_images_per_turn', label: "Bir javobda AI ko'radigan maksimum rasm", group: 'Xulq', type: 'number', default: 3 },
   { key: 'ask_intent', label: "Birinchi xabarda «kurs bo'yichami?» deb so'rash", group: 'Xulq', type: 'boolean', default: true },
   { key: 'ai_closing_message', label: "Anketa tugaganda AI tabiiy yakuniy xabar yozsin (o'chiq = faqat «Tushunarli»)", group: 'Xulq', type: 'boolean', default: true },
   { key: 'reminder1_delay_minutes', label: '1-eslatma (daqiqa)', group: 'Eslatmalar', type: 'number', default: 60 },
@@ -154,7 +157,7 @@ export const SETTINGS_SPEC: SettingDef[] = [
     group: 'Kalit so\'zlar',
     type: 'longtext',
     default:
-      "kurs, курс, ozish, ozmoq, ozay, vazn, ves tashla, massa, trenirovka, mashg'ulot, programma, dastur, marafon, narx, narxi, qatnash, yozilmoq, yozilsam, ratsion, pitaniya, sport, zal, похуд, трениров, программ, записат, марафон, цена, сколько стоит, питани, набрать",
+      "kurs, курс, ozish, ozmoq, ozay, ozg'in, oriq, semir, to'lish, vazn, kilo, ves tashla, massa, qorin, press, mushak, qomat, forma, tana, trenirovka, mashg'ulot, programma, dastur, marafon, narx, narxi, qatnash, yozilmoq, yozilsam, ratsion, pitaniya, dieta, sport, zal, maslahat, yordam bering, похуд, худ, толст, живот, мышц, вес, форм, трениров, программ, записат, марафон, цена, сколько стоит, питани, набрать, совет",
   },
   {
     key: 'safety_keywords',

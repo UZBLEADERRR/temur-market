@@ -200,7 +200,7 @@ async function loadLeads() {
       const a = l.answers || {};
       const info = [a.height && a.height + 'sm', a.weight && a.weight + 'kg', a.age && a.age + 'y', l.bmi && 'TMI ' + l.bmi].filter(Boolean).join(' · ');
       return `<tr class="lead" data-id="${l.id}">
-        <td>${l.urgent ? '<span class="urgent">🔴 </span>' : ''}<b>${esc(l.name)}</b><div class="muted">${l.username ? '@' + esc(l.username) : l.telegramId}</div></td>
+        <td>${l.urgent ? '<span class="urgent">🔴 </span>' : ''}${l.alwaysOn ? '♾ ' : ''}<b>${esc(l.name)}</b><div class="muted">${l.username ? '@' + esc(l.username) : l.telegramId}</div></td>
         <td class="hide-sm">${esc(l.source)}</td>
         <td>${esc(info) || '<span class="muted">—</span>'}<div class="muted">${esc((a.goal || '').slice(0, 40))}</div></td>
         <td><span class="badge b-${l.status}">${STATUS[l.status] || l.status}</span><div class="muted">${fmt(l.readyAt || l.lastClientMessageAt)}</div></td>
@@ -249,6 +249,13 @@ async function openLead(id) {
     <textarea id="replyText" placeholder="Xabar..."></textarea>
     <div class="row" style="margin-top:8px"><button class="btn" id="sendReply">Yuborish</button>
       ${l.mode === 'AI' ? '<button class="btn secondary" id="aiOff">🤖 AI ni o\'chirish</button>' : '<button class="btn secondary" id="aiOn">🤖 AI ni qayta yoqish</button>'}</div>
+    <h3>Boshqaruv</h3>
+    <label style="display:flex;gap:8px;align-items:center;color:var(--text)"><input type="checkbox" id="alwaysOn" style="width:auto" ${l.alwaysOn ? 'checked' : ''}> ♾ AI shu mijoz bilan doimiy yozishsin (anketadan keyin ham, siz yozsangiz ham)</label>
+    <div class="row" style="margin-top:10px">
+      <button class="btn secondary" id="resetLead">🧹 Ma'lumotlarni tozalash</button>
+      <button class="btn danger" id="deleteLead">🗑 O'chirish</button>
+    </div>
+    <p class="muted">Tozalash: javoblar va yozishma o'chadi, mijoz keyingi xabarida bot noldan boshlaydi.</p>
     <h3>Eslatma (faqat siz ko'rasiz)</h3>
     <textarea id="notes">${esc(l.notes || '')}</textarea>
     <div style="margin-top:8px"><button class="btn secondary" id="saveNotes">Saqlash</button></div>`;
@@ -273,6 +280,10 @@ async function openLead(id) {
     const ok = tg ? await new Promise((r) => tg.showConfirm('AI shu chatda anketani davom ettiradi. Yoqilsinmi?', r)) : confirm('AI yoqilsinmi?');
     if (ok) { await api('/leads/' + id + '/mode', { method: 'POST', body: { mode: 'AI' } }); openLead(id); }
   };
+  const ask = (text) => tg ? new Promise((r) => tg.showConfirm(text, r)) : Promise.resolve(confirm(text));
+  $('alwaysOn').onchange = async (e) => { await api('/leads/' + id + '/always-on', { method: 'POST', body: { on: e.target.checked } }); toast(e.target.checked ? 'AI doimiy yoqildi' : "Doimiy rejim o'chirildi"); openLead(id); };
+  $('resetLead').onclick = async () => { if (await ask("Javoblar va yozishma o'chiriladi, bot noldan boshlaydi. Davom etilsinmi?")) { await api('/leads/' + id + '/reset', { method: 'POST' }); toast('Tozalandi'); openLead(id); } };
+  $('deleteLead').onclick = async () => { if (await ask("Mijoz butunlay o'chirilsinmi?")) { await api('/leads/' + id, { method: 'DELETE' }); toast("O'chirildi"); showTab('leads'); } };
   $('saveNotes').onclick = async () => { await api('/leads/' + id + '/notes', { method: 'POST', body: { notes: $('notes').value } }); toast('Saqlandi'); };
 }
 

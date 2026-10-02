@@ -31,14 +31,19 @@ export class AiService {
   }
 
   /** Structured reply for the questionnaire. Throws after all retries fail. */
-  async reply(system: string, userText: string, meta: Record<string, unknown> = {}): Promise<AiResponse> {
+  async reply(
+    system: string,
+    userText: string,
+    meta: Record<string, unknown> = {},
+    images: Array<{ mimeType: string; data: string }> = [],
+  ): Promise<AiResponse> {
     const cfg = await this.modelConfig();
     let lastErr: unknown;
     for (let attempt = 0; attempt <= this.delays.length; attempt++) {
       const started = Date.now();
       try {
         const res = await this.sem.run(() =>
-          this.client.generate({ system, parts: [{ text: userText }], json: true, ...cfg }),
+          this.client.generate({ system, parts: [...images.map((inlineData) => ({ inlineData })), { text: userText }], json: true, ...cfg }),
         );
         const parsed = parseAiResponse(res.text);
         logger.info(

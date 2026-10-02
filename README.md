@@ -37,6 +37,18 @@ Asosiy manba — texnik topshiriq (2-versiya) va system prompt v3.2. Prompt matn
 - **Natijalar, kurs va narx haqidagi savollarga** AI "Murabbiy haqida", "Kurs haqida" va "O'quvchilar natijalari" ma'lumotlari bilan javob beradi va mijozni motivatsiya qiladi. U yerda yo'q narsani o'zidan to'qimaydi.
 - **Anketa tugaganda** AI qisqa, tabiiy yakuniy xabar yozadi. Xavfli holatlarda faqat "Tushunarli" yuboriladi.
 
+- **Maqsadni tushunadi.** Mijoz ozish, semirish, ozg'inlik, qomat yoki maslahat haqida yozsa, bot "kurs bo'yichami?" deb so'ramaydi: salomga javob beradi, uning gapiga javob beradi va 1-savolga o'tadi. Bu savol faqat mijoz shunchaki "Salom" yozganda beriladi. Kalit so'z bo'lmagan xabarlarni AI o'zi tasniflaydi. Turkcha klaviaturadagi harflar (ğ, ş) ham tushuniladi.
+- **Rasmlar.** Qomat yoki ovqat rasmi yuborilsa, AI ularni ko'radi (bir javobda 3 tagacha) va hurmat bilan izoh beradi.
+- **Spam himoyasi.** Faqat stiker yoki emoji kelsa javob berilmaydi. Partiyada 15 tadan ko'p xabar bo'lsa, faqat oxirgi 15 tasi olinadi. 5 daqiqada 40 tadan ko'p xabar kelsa, AI to'xtaydi va adminga xabar boradi.
+- **Murabbiy maslahati.** Umumiy maslahatlar beradi: muntazamlik, oqsil, uyqu, suv. Shaxsiy ratsion va tibbiy maslahat bermaydi.
+- **Ko'p foydalanuvchi.** grammY runner turli chatlarni parallel, bitta chatni esa ketma-ket ishlaydi. LLM so'rovlari navbat bilan cheklangan. Kutilmagan xatolar loglanadi va jarayonni to'xtatmaydi. Testda 150 ta mijoz bir vaqtda yozdi.
+- **Mini ilova → mijoz kartochkasi:**
+  - "🧹 Ma'lumotlarni tozalash" — bot shu mijoz bilan noldan boshlaydi;
+  - "♾ AI doimiy" — anketadan keyin ham, Temur yozsa ham AI yordamchi sifatida javob beradi;
+  - "🗑 O'chirish".
+
+  Botda ham shunday buyruqlar bor: `/reset <id>`, `/always_on <id>`, `/always_off <id>`.
+
 ### Admin nimalarni o'zgartira oladi (kod yozmasdan)
 
 Bot ichida (`/settings`, `/set`, `/prompt`) yoki mini ilovaning **Sozlamalar** bo'limida quyidagilarni o'zgartirish mumkin:
@@ -216,7 +228,9 @@ Webhook kerak bo'lsa: `BOT_MODE=webhook`, `WEBHOOK_SECRET=<tasodifiy>`. Webhook 
 /lead <id|@user>   kartochka
 /ai_off <id> /ai_on <id>   chatda AI ni o'chirish / qayta yoqish
 /ai_global_off /ai_global_on
-/settings /get <kalit> /set <kalit> [qiymat] /reset <kalit>
+/settings /get <kalit> /set <kalit> [qiymat] /reset_setting <kalit>
+/reset <id>        mijoz ma'lumotlarini tozalash
+/always_on <id> /always_off <id>
 /prompt            promptni .txt qilib oladi, keyingi xabar/fayl — yangi prompt
 /style /style_rebuild /examples /examples_clear
 /campaigns /campaign_add <kod> <manba> /campaign_del <kod>

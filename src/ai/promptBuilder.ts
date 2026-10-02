@@ -15,6 +15,9 @@ Faqat JSON qaytar, boshqa hech narsa yozma:
 - READY + reason=wants_coach: mijoz savollarsiz murabbiyning o'zi bilan gaplashmoqchi → messages: ["Tushunarli"].
 - READY + reason=bot_question: mijoz jiddiy «botmisiz?/AI misiz?/o'zingizmi?» deb so'radi → messages: [ROST JAVOB matni].
 - URGENT_READY + reason=safety: ochlik, qusish, o'ziga zarar, xavfli ovqat cheklash yoki juda past maqsad vazn → messages: ["Tushunarli"].
+- RASMLAR: mijoz rasm yuborsa (qomat, ovqat, skrinshot) — rasm so'rovga ilova qilingan. Qisqa, samimiy va hurmat bilan izoh ber (tana haqida kamsituvchi so'z yo'q, tashxis yo'q, aniq foiz/kilo taxmin qilma), keyin suhbatni davom ettir. Rasmdagi narsani to'qima.
+- SPAM: ko'p rasm, stiker, reklama, havola yoki mavzuga aloqasiz xabarlarga chalg'ima — ularni e'tiborsiz qoldir va anketani davom ettir; faqat stiker/emoji bo'lsa NO_RESPONSE.
+- MASLAHAT: ruxsat berilgan bo'lsa, haqiqiy murabbiydek qisqa umumiy maslahat ber (1–3 gap: mashg'ulot muntazamligi, oqsil, uyqu, suv, yurish, sabr). Shaxsiy ratsion/dastur, kaloriya raqamlari, dori, tibbiy tashxis — yo'q: «shaxsiy dasturni kurs ichida tuzib beraman» de.
 - PAUSE: mijoz "keyinroq yozaman" desa → bitta juda qisqa javob (masalan «Hop»), savol berma.
 - NO_RESPONSE: xabar javob talab qilmaydi (stiker, "ok" va savol allaqachon berilgan) → messages: [].
 - extracted: faqat mijoz shu suhbatda aniq aytgan ma'lumot, aks holda null. Raqamlar raqam bo'lsin (bo'y sm, vazn kg). goal — qisqa matn ("ozish 85 kg gacha"). trainingLocation: "zal" yoki "uy". healthProblems: muammo bo'lmasa "yo'q".
@@ -43,6 +46,9 @@ export interface PromptInput {
   results: string;
   ackWords: string;
   intentPending: boolean;
+  coachMode?: boolean;
+  allowAdvice?: boolean;
+  photos?: number;
   lastAiMessages: string[];
   summary?: string | null;
   history: Array<{ sender: string; text: string }>;
@@ -74,7 +80,12 @@ export function buildUserText(input: PromptInput): string {
     `Joriy savol (javobi hali to'liq yo'q): ${input.step}/5`,
     input.missing ? `Joriy savolda yetishmayapti: ${input.missing}` : '',
     `QOLGAN SAVOLLAR (tartib bilan):\n${input.remainingQuestions.map((q) => `${q.step}. «${q.text}»`).join('\n')}`,
-    input.intentPending ? "MAQSAD ANIQLANMAGAN: mijoz kurs bo'yicha yozyaptimi? intent ni aniqla." : '',
+    input.intentPending ? "MAQSAD ANIQLANMAGAN: mijoz kurs bo'yicha yozyaptimi? intent ni aniqla (ozish, semirish, ozg'inlik, qomat, maslahat so'rash — bularning hammasi course)." : '',
+    input.coachMode
+      ? "REJIM: anketa tugagan. Sen murabbiy yordamchisisan: mijoz savoliga javob ber, qo'llab-quvvatla, umumiy maslahat ber. Anketa savollarini berma. action=ASK_NEXT (question=null) yoki NO_RESPONSE."
+      : '',
+    `MASLAHAT: ${input.allowAdvice === false ? "ruxsat yo'q — maslahat so'ralsa, savollardan keyin o'zim aytaman de" : 'ruxsat bor (umumiy, qisqa)'}`,
+    input.photos ? `Mijoz ${input.photos} ta rasm yubordi (ilova qilingan).` : '',
     `ROST JAVOB matni («botmisiz?» uchun): «${input.botAnswer}»`,
     `Bazada javobi yo'q savolga: «${input.priceReply}»`,
     `TASDIQ SO'ZLARI: ${input.ackWords}`,

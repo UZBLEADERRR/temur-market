@@ -19,10 +19,12 @@ const HELP = `<b>TEMUR.FIT AI-yordamchi — admin</b>
 /export — Excel (XLSX) · /export_csv — CSV
 /lead &lt;telegramId&gt; — lead kartochkasi
 /ai_off &lt;telegramId&gt; · /ai_on &lt;telegramId&gt; — chatda AI ni o'chirish/yoqish
+/always_on &lt;id&gt; · /always_off &lt;id&gt; — AI shu mijoz bilan doimiy yozishsin
+/reset &lt;id&gt; — mijoz ma'lumotlarini tozalash (bot noldan boshlaydi)
 
 <b>Sozlamalar</b> (hammasini mini ilovada ham o'zgartirish mumkin)
 /settings — barcha kalitlar
-/get &lt;kalit&gt; · /set &lt;kalit&gt; [qiymat] · /reset &lt;kalit&gt;
+/get &lt;kalit&gt; · /set &lt;kalit&gt; [qiymat] · /reset_setting &lt;kalit&gt;
 /prompt — system promptni ko'rish va yangilash
 /ai_global_off · /ai_global_on — AI ni butunlay o'chirish/yoqish
 
@@ -99,6 +101,21 @@ export function registerAdminHandlers(bot: Bot, app: AppContext): void {
     await app.leads.setMode(String(lead._id), 'AI', ctx.from?.id);
     await reply(ctx, `🤖 AI qayta yoqildi: ${lead.telegramId}. Mijoz keyingi xabar yozganda davom etadi.`);
   });
+  admin.command(['always_on', 'always_off'], async (ctx) => {
+    const lead = await findLead(ctx.match);
+    if (!lead) return reply(ctx, 'Topilmadi.');
+    const on = ctx.message?.text?.startsWith('/always_on') ?? false;
+    lead.alwaysOn = on;
+    if (on) lead.mode = 'AI';
+    await lead.save();
+    await reply(ctx, on ? `♾ AI ${lead.telegramId} bilan doimiy yozishadi.` : `Doimiy rejim o'chirildi: ${lead.telegramId}`);
+  });
+  admin.command('reset', async (ctx) => {
+    const lead = await findLead(ctx.match);
+    if (!lead) return reply(ctx, "Topilmadi. /reset 123456789 yoki /reset @username (sozlama uchun: /reset_setting kalit)");
+    await app.engine.resetLead(String(lead._id));
+    await reply(ctx, `🧹 Tozalandi: ${lead.telegramId}. Keyingi xabarida bot noldan boshlaydi.`);
+  });
   admin.command('ai_global_off', async (ctx) => {
     await app.settings.set({ ai_enabled: false });
     await reply(ctx, "⛔️ AI barcha chatlarda to'xtatildi.");
@@ -149,7 +166,7 @@ export function registerAdminHandlers(bot: Bot, app: AppContext): void {
     await reply(ctx, `✍️ <b>${escapeHtml(def.label)}</b> uchun yangi qiymatni yuboring (matn yoki .txt fayl). /cancel — bekor qilish.`);
   });
 
-  admin.command('reset', async (ctx) => {
+  admin.command('reset_setting', async (ctx) => {
     const key = ctx.match?.trim();
     if (!key || !SETTINGS_BY_KEY.has(key)) return reply(ctx, "Noma'lum kalit. /settings");
     await app.settings.reset(key);

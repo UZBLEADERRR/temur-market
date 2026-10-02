@@ -24,7 +24,7 @@ const EnvSchema = z.object({
   LLM_MODEL: z.string().default('gemini-3.8-flash'),
   LLM_BASE_URL: z.string().default('https://generativelanguage.googleapis.com/v1beta'),
   LLM_TIMEOUT_MS: z.coerce.number().default(30000),
-  LLM_MAX_CONCURRENCY: z.coerce.number().default(4),
+  LLM_MAX_CONCURRENCY: z.coerce.number().default(8),
   PORT: z.coerce.number().default(3000),
   PUBLIC_URL: z.string().optional(),
   RAILWAY_PUBLIC_DOMAIN: z.string().optional(),

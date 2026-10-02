@@ -6,6 +6,13 @@ export function normalize(text: string): string {
     .toLowerCase()
     .replace(/[‘’`ʻʼ´]/g, "'")
     .replace(/ё/g, 'е')
+    // Turkish-keyboard spellings of Uzbek Latin: ğ → g', ş → sh, ç → ch, ö → o'
+    .replace(/ğ/g, "g'")
+    .replace(/ş/g, 'sh')
+    .replace(/ç/g, 'ch')
+    .replace(/ö/g, "o'")
+    .replace(/ü/g, 'u')
+    .replace(/ı/g, 'i')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -50,4 +57,21 @@ export function escapeHtml(s: string): string {
 
 export function truncate(s: string, max: number): string {
   return s.length <= max ? s : `${s.slice(0, max - 1)}…`;
+}
+
+const GREETING_WORDS = new Set([
+  'salom', 'assalomu', 'assalom', 'alaykum', 'aleykum', 'alekum', 'aka', 'opa', 'uka', 'yaxshimisiz', 'qalaysiz', 'qalesiz',
+  'xayrli', 'hayrli', 'kun', 'tong', 'kech', 'kechqurun', 'ertalab', 'ok', 'hi', 'hello', 'hey', 'привет', 'здравствуйте',
+  'здравствуй', 'добрый', 'день', 'вечер', 'утро', 'салом', 'ассалому', 'алайкум', 'brat', 'бро', 'bro', 'sizga', 'savol', 'bor', 'edi',
+]);
+
+/** True for messages that are only a greeting ("Salom", "Assalomu alaykum aka", "Привет"), i.e. no purpose yet. */
+export function isGreetingOnly(text: string): boolean {
+  const words = normalize(text)
+    .replace(/[^\p{L}\s']/gu, ' ')
+    .split(/\s+/)
+    .map((w) => w.replace(/'/g, ''))
+    .filter(Boolean);
+  if (!words.length) return true;
+  return words.every((w) => GREETING_WORDS.has(w) || GREETING_WORDS.has(w.replace(/'/g, '')));
 }

@@ -41,6 +41,8 @@ const LeadSchema = new Schema(
     currentQuestion: { type: Number, default: 1 },
     /** asked = «kurs bo'yichami?» sent; course = lead; other = not a lead (handed to the coach silently). */
     intent: { type: String, enum: ['asked', 'course', 'other'] },
+    /** Admin switch: AI keeps chatting with this client (also after the questionnaire / manual messages). */
+    alwaysOn: { type: Boolean, default: false },
     lastAskedStep: Number,
     askCount: { type: Number, default: 0 },
     skippedSteps: { type: [Number], default: [] },
