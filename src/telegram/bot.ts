@@ -14,8 +14,8 @@ export const ALLOWED_UPDATES = [
 ] as const;
 
 /** grammY bot with Telegram rate limiting (throttler) and automatic 429/5xx retries. */
-export function createBot(token: string): Bot {
-  const bot = new Bot(token);
+export function createBot(token: string, apiRoot?: string): Bot {
+  const bot = new Bot(token, apiRoot ? { client: { apiRoot } } : undefined);
   bot.api.config.use(apiThrottler());
   bot.api.config.use(autoRetry({ maxRetryAttempts: 3, maxDelaySeconds: 30 }));
   // updates of different chats run in parallel (runner), updates of one chat stay in order

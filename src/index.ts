@@ -29,8 +29,8 @@ async function main() {
     settings,
     { maxConcurrency: env.LLM_MAX_CONCURRENCY },
   );
-  const bot = createBot(env.TELEGRAM_BOT_TOKEN);
-  const gateway = new GrammyGateway(bot, env.adminIds, env.TELEGRAM_BOT_TOKEN);
+  const bot = createBot(env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_API_ROOT);
+  const gateway = new GrammyGateway(bot, env.adminIds, env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_API_ROOT);
   const leads = new LeadService({ gateway, timeZone: env.TZ_NAME, publicUrl: env.publicUrl });
   const engine = new ConversationEngine({ gateway, ai, settings, leads });
   const reminders = new ReminderService(engine, settings);
@@ -53,6 +53,7 @@ async function main() {
   await bot.api
     .setMyCommands(
       [
+        { command: 'status', description: 'Tizim holati' },
         { command: 'navbat', description: 'Javob kutayotgan mijozlar' },
         { command: 'stats', description: 'Kunlik statistika' },
         { command: 'export', description: 'Excel eksport' },

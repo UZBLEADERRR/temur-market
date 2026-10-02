@@ -8,6 +8,7 @@ export class GrammyGateway implements TelegramGateway {
     private readonly bot: Bot,
     private readonly adminIds: number[],
     private readonly token: string,
+    private readonly apiRoot = 'https://api.telegram.org',
   ) {}
 
   async sendBusinessMessage(connectionId: string, chatId: number, text: string) {
@@ -51,7 +52,7 @@ export class GrammyGateway implements TelegramGateway {
   async downloadFile(fileId: string): Promise<Buffer> {
     const file = await this.bot.api.getFile(fileId);
     if (!file.file_path) throw new Error('File path missing');
-    const res = await fetch(`https://api.telegram.org/file/bot${this.token}/${file.file_path}`);
+    const res = await fetch(`${this.apiRoot}/file/bot${this.token}/${file.file_path}`);
     if (!res.ok) throw new Error(`File download failed: ${res.status}`);
     return Buffer.from(await res.arrayBuffer());
   }

@@ -1,6 +1,6 @@
 import { InlineKeyboard, type Bot, type Context } from 'grammy';
 import { Lead } from '../database/models/Lead';
-import { Campaign, StyleExample } from '../database/models/misc';
+import { BusinessConnection, Campaign, StyleExample } from '../database/models/misc';
 import type { AppContext } from '../services/appContext';
 import { SETTINGS_BY_KEY, SETTINGS_SPEC } from '../services/settingsSpec';
 import { formatLeadCard } from '../leads/leadCard';
@@ -14,6 +14,7 @@ import { logger } from '../utils/logger';
 
 const HELP = `<b>TEMUR.FIT AI-yordamchi — admin</b>
 
+/status — tizim holati (Business ulanish, Gemini, xatolar)
 /navbat — javob kutayotgan mijozlar (eng eskisi birinchi)
 /stats — bugungi statistika (/stats 2026-10-01)
 /export — Excel (XLSX) · /export_csv — CSV
@@ -56,6 +57,34 @@ export function registerAdminHandlers(bot: Bot, app: AppContext): void {
   admin.command(['start', 'help'], async (ctx) => {
     const kb = app.env.publicUrl ? new InlineKeyboard().webApp('📋 Mini ilova', `${app.env.publicUrl}/app/`) : undefined;
     await reply(ctx, HELP, kb ? { reply_markup: kb } : {});
+  });
+
+  /** Diagnostics: Business connection rights, AI switch, LLM health, recent problems. */
+  admin.command('status', async (ctx) => {
+    const lines: string[] = ['🩺 <b>Holat</b>'];
+    lines.push(`AI umumiy: ${(await app.settings.bool('ai_enabled')) ? '✅ yoqilgan' : '⛔️ o\'chirilgan (/ai_global_on)'}`);
+    const conns = await BusinessConnection.find().lean();
+    if (!conns.length) lines.push("Business ulanish: ❌ yo'q — Telegram Business → Chatbots'da botni ulang");
+    for (const c of conns) {
+      try {
+        const live = await bot.api.getBusinessConnection(c.connectionId);
+        const r = (live.rights ?? {}) as { can_reply?: boolean; can_read_messages?: boolean };
+        lines.push(`Business (${escapeHtml(live.user.first_name)}): ${live.is_enabled ? '✅ faol' : '⛔️ o\'chiq'} · javob ruxsati: ${r.can_reply === false ? '❌ yo\'q' : '✅ bor'}`);
+      } catch (err) {
+        lines.push(`Business ulanish: ❌ ${escapeHtml((err as Error).message.slice(0, 120))}`);
+      }
+    }
+    try {
+      const started = Date.now();
+      await app.ai.freeText('Faqat OK deb javob ber.', 'ping');
+      lines.push(`Gemini (${escapeHtml((await app.settings.get('llm_model')) || app.env.LLM_MODEL)}): ✅ ${Date.now() - started} ms`);
+    } catch (err) {
+      lines.push(`Gemini: ❌ <code>${escapeHtml((err as Error).message.slice(0, 200))}</code>`);
+    }
+    const blocked = await Lead.countDocuments({ readyReason: 'send_blocked' });
+    const failing = await Lead.countDocuments({ aiFailures: { $gt: 0 } });
+    lines.push(`Yuborib bo'lmagan chatlar: ${blocked} · AI xatosi bor chatlar: ${failing}`);
+    await reply(ctx, lines.join('\n'));
   });
 
   admin.command('navbat', async (ctx) => reply(ctx, await formatQueue(tz)));

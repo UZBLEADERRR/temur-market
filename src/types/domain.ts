@@ -13,7 +13,8 @@ export type ReadyReason =
   | 'manual_takeover'
   | 'paused'
   | 'not_lead'
-  | 'flood';
+  | 'flood'
+  | 'send_blocked';
 
 export interface LeadAnswers {
   height?: number;

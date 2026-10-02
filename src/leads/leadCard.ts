@@ -19,6 +19,8 @@ const REASON_LABEL: Record<string, string> = {
   low_target_bmi: 'Maqsad TMI juda past',
   manual_takeover: "Murabbiy o'zi yozdi",
   not_lead: "Kurs bo'yicha emas",
+  flood: "Juda ko'p xabar (spam)",
+  send_blocked: 'Telegram yuborishga ruxsat bermadi (pauza?)',
 };
 
 export const statusLabel = (s: string) => STATUS_LABEL[s] ?? s;

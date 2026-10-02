@@ -146,6 +146,7 @@ const initData = tg ? tg.initData : '';
 const urlToken = new URLSearchParams(location.search).get('token') || '';
 
 const STATUS = { NEW: 'Yangi', QUESTIONNAIRE: 'Anketa', READY: 'Kutmoqda', ANSWERED: 'Javob berildi', PAID: "To'ladi", REJECTED: 'Rad etdi' };
+const REASONS = { completed: '5 savol tugadi', wants_coach: "Murabbiyni so'radi", bot_question: '«Botmisiz?»', safety: '⚠️ Xavfli holat', low_target_bmi: '⚠️ Past maqsad TMI', manual_takeover: "Murabbiy o'zi yozdi", not_lead: "Kurs bo'yicha emas", flood: '⚠️ Spam', send_blocked: "⚠️ Telegram yuborishga ruxsat bermadi (pauza?)" };
 const FILTERS = [['', 'Hammasi'], ['QUEUE', '⏳ Navbat'], ['QUESTIONNAIRE', 'Anketa'], ['ANSWERED', 'Javob berildi'], ['PAID', "To'ladi"], ['REJECTED', 'Rad etdi']];
 let currentFilter = 'QUEUE';
 let currentLeadId = null;
@@ -225,7 +226,7 @@ async function openLead(id) {
     <div class="row" style="margin:10px 0">
       <span class="badge b-${l.status}">${STATUS[l.status] || l.status}</span>
       <span class="badge">${l.mode === 'AI' ? '🤖 AI' : '🧑 Qo\'lda'}</span>
-      ${l.readyReason ? `<span class="badge">${esc(l.readyReason)}</span>` : ''}
+      ${l.readyReason ? `<span class="badge">${esc(REASONS[l.readyReason] || l.readyReason)}</span>` : ''}
     </div>
     <div class="row">
       <button class="btn" id="openChat">💬 Chatni ochish</button>

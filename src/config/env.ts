@@ -16,6 +16,8 @@ const csvIds = z
 const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   TELEGRAM_BOT_TOKEN: z.string().default(''),
+  /** Optional custom Bot API server (local Bot API server or tests). */
+  TELEGRAM_API_ROOT: z.string().optional(),
   TELEGRAM_ADMIN_ID: csvIds,
   ADMIN_IDS: csvIds,
   TEMUR_TELEGRAM_ID: z.coerce.number().optional(),

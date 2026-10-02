@@ -719,12 +719,23 @@ export class ConversationEngine {
         logger.info({ leadId: String(lead._id), kind: opts.kind ?? 'text', len: text.length }, 'Outgoing AI message');
       } catch (err) {
         logger.error({ leadId: String(lead._id), err: (err as Error).message }, 'Failed to send business message');
+        const reason = String((err as { description?: string }).description ?? (err as Error).message).slice(0, 200);
         if (isChatClosedError(err)) {
           // bot paused in this chat / connection gone / 24h window closed → AI stops for this chat
-          await Lead.updateOne({ _id: lead._id }, { $set: { mode: 'MANUAL' } });
+          await Lead.updateOne({ _id: lead._id }, { $set: { mode: 'MANUAL', readyReason: 'send_blocked' } });
           lead.mode = 'MANUAL';
-          await AdminEvent.create({ type: 'send_blocked', leadId: lead._id, data: { err: (err as Error).message } });
+          await AdminEvent.create({ type: 'send_blocked', leadId: lead._id, data: { err: reason } });
         }
+        // never fail silently: the coach must know the client got no answer
+        await this.deps.gateway
+          .notifyAdmins(
+            `⚠️ Mijozga xabar yuborilmadi: <a href="tg://user?id=${lead.telegramId}">${escapeHtml(displayName(lead))}</a>\n` +
+              `Telegram javobi: <code>${escapeHtml(reason)}</code>\n` +
+              (isChatClosedError(err)
+                ? "Sabab odatda: bot shu chatda <b>pauzada</b> yoki Telegram Business → Chatbots'da <b>javob berish ruxsati</b> o'chiq. Pauzani olib tashlang, so'ng mini ilovada «🧹 Tozalash» yoki «AI ni qayta yoqish» ni bosing."
+                : 'Bot keyinroq qayta urinadi.'),
+          )
+          .catch(() => undefined);
         break;
       }
     }
