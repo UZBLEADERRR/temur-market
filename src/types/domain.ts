@@ -11,7 +11,8 @@ export type ReadyReason =
   | 'safety'
   | 'low_target_bmi'
   | 'manual_takeover'
-  | 'paused';
+  | 'paused'
+  | 'not_lead';
 
 export interface LeadAnswers {
   height?: number;

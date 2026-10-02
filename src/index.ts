@@ -21,6 +21,8 @@ async function main() {
   await connectDatabase(env.MONGODB_URI);
 
   const settings = new SettingsService();
+  const migrated = await settings.migrateLegacyDefaults();
+  if (migrated.length) logger.info({ keys: migrated }, 'Old default settings replaced with new defaults');
   const ai = new AiService(
     new GeminiClient({ apiKey: env.LLM_API_KEY, model: env.LLM_MODEL, baseUrl: env.LLM_BASE_URL, timeoutMs: env.LLM_TIMEOUT_MS }),
     settings,

@@ -7,7 +7,7 @@ import { buildSystem, buildUserText } from '../ai/promptBuilder';
 import { stripMarkers, type AiResponse } from '../ai/responseSchema';
 import { parseAnswers, parseTargetWeight, inRange } from '../leads/answerParser';
 import { bmiBand, calcBmi } from '../leads/bmi';
-import { missingFields, missingHint, nextStep, questionText } from '../leads/questionnaire';
+import { missingFields, missingHint, nextStep, pickAck, questionText, stripLeadingAck } from '../leads/questionnaire';
 import type { LeadService } from '../leads/leadService';
 import { displayName } from '../leads/leadCard';
 import { detectSource } from '../leads/sourceDetector';
@@ -105,13 +105,7 @@ export class ConversationEngine {
       lead.lastName = msg.chat.last_name ?? lead.lastName;
     }
 
-    if (msg.kind === 'voice' && msg.voice && isAiActive(lead)) {
-      text = await this.transcribeVoice(msg.voice.fileId, msg.voice.mimeType).catch((err) => {
-        logger.warn({ err: (err as Error).message }, 'Voice transcription failed');
-        return '';
-      });
-      text = text ? `[ovozli xabar] ${text}` : '[ovozli xabar, matni aniqlanmadi]';
-    } else if (!text && msg.kind !== 'text') {
+    if (!text && msg.kind !== 'text' && msg.kind !== 'voice') {
       text = `[${msg.kind === 'photo' ? 'rasm' : msg.kind === 'video' ? 'video' : msg.kind === 'sticker' ? 'stiker' : 'fayl'}]`;
     }
 
@@ -125,13 +119,16 @@ export class ConversationEngine {
       kind: msg.kind,
       text,
       processed: !active,
+      // voice is transcribed when the batch is processed, so the Telegram update loop is never blocked
+      meta: msg.kind === 'voice' && msg.voice ? { voiceFileId: msg.voice.fileId, mimeType: msg.voice.mimeType } : undefined,
     });
+    const isFirst = !lead.lastClientMessageAt;
     lead.lastClientMessageAt = now;
     if (active) lead.pendingSince ??= now;
     await lead.save();
     logger.info({ leadId: String(lead._id), kind: msg.kind, active }, 'Incoming client message');
 
-    if (active) await this.scheduleAsync(String(lead._id));
+    if (active) await this.scheduleAsync(String(lead._id), { first: isFirst, voice: msg.kind === 'voice' });
     return lead;
   }
 
@@ -188,8 +185,15 @@ export class ConversationEngine {
 
   // ───────────────────────────── scheduling ─────────────────────────────
 
-  private async scheduleAsync(leadId: string): Promise<void> {
-    const ms = this.opts.debounceMsOverride ?? (await this.deps.settings.num('debounce_seconds')) * 1000;
+  /**
+   * Waits until the client stops writing: every new message restarts the timer
+   * (Telegram does not tell bots that a client is typing, so a quiet period is used instead).
+   */
+  private async scheduleAsync(leadId: string, hint: { first?: boolean; voice?: boolean } = {}): Promise<void> {
+    const s = this.deps.settings;
+    const base = await s.num(hint.first ? 'debounce_first_seconds' : 'debounce_seconds');
+    const extra = hint.voice ? await s.num('debounce_voice_extra_seconds') : 0;
+    const ms = this.opts.debounceMsOverride ?? (base + extra) * 1000;
     this.cancel(leadId);
     if (ms <= 0) {
       await this.process(leadId).catch((err) => logger.error({ err: (err as Error).message, leadId }, 'Process failed'));
@@ -231,6 +235,17 @@ export class ConversationEngine {
       await lead.save();
       return;
     }
+    for (const m of pending) {
+      const meta = m.meta as { voiceFileId?: string; mimeType?: string } | undefined;
+      if (m.kind === 'voice' && !m.text && meta?.voiceFileId) {
+        const t = await this.transcribeVoice(meta.voiceFileId, meta.mimeType).catch((err) => {
+          logger.warn({ err: (err as Error).message }, 'Voice transcription failed');
+          return '';
+        });
+        m.text = t ? `[ovozli xabar] ${t}` : '[ovozli xabar, matni aniqlanmadi]';
+        await Message.updateOne({ _id: m._id }, { $set: { text: m.text } });
+      }
+    }
     const pendingIds = pending.map((m) => m._id);
     const newText = pending.map((m) => m.text).filter(Boolean).join('\n');
     const lang: Lang = detectLanguage(newText) ?? (lead.language as Lang) ?? 'uz';
@@ -271,21 +286,38 @@ export class ConversationEngine {
       if (target && stepBefore >= 2 && answers.targetWeight === undefined) answers.targetWeight = target;
     }
 
-    // 3) First contact: send the fixed first message unless the client already gave Q1 data
+    // 3) First contact: is the client writing about the course at all?
+    const gaveBasics = answers.height !== undefined || answers.weight !== undefined || answers.age !== undefined;
+    const courseSignal =
+      (lead.source && lead.source !== 'unknown') ||
+      gaveBasics ||
+      Boolean(containsAny(newText, splitKeywords(await this.deps.settings.get('course_keywords'))));
     if (lead.status === 'NEW') {
       lead.status = 'QUESTIONNAIRE';
-      const gaveBasics = answers.height !== undefined || answers.weight !== undefined || answers.age !== undefined;
-      if (!gaveBasics) {
-        lead.answers = answers as never;
-        lead.currentQuestion = 1;
-        lead.lastAskedStep = 1;
+      const askIntent = await this.deps.settings.bool('ask_intent');
+      if (courseSignal || !askIntent) {
+        lead.intent = 'course';
+        if (!gaveBasics) {
+          lead.answers = answers as never;
+          lead.currentQuestion = 1;
+          lead.lastAskedStep = 1;
+          lead.askCount = 1;
+          await markProcessed();
+          await lead.save();
+          await this.sendToClient(lead, [await this.deps.settings.text('first_message', lang)]);
+          return;
+        }
+      } else {
+        lead.intent = 'asked';
+        lead.lastAskedStep = 0;
         lead.askCount = 1;
         await markProcessed();
         await lead.save();
-        await this.sendToClient(lead, [await this.deps.settings.text('first_message', lang)]);
+        await this.sendToClient(lead, [await this.deps.settings.text('intent_question', lang)]);
         return;
       }
     }
+    if (lead.intent === 'asked' && courseSignal) lead.intent = 'course';
 
     // 4) LLM turn
     const bmiPre = calcBmi(answers.weight, answers.height);
@@ -313,6 +345,24 @@ export class ConversationEngine {
 
     if (ai.language) lead.language = ai.language;
     const outLang = (lead.language as Lang) ?? lang;
+
+    if (lead.intent === 'asked' && ai.action !== 'URGENT_READY' && ai.action !== 'READY' && !markerReady) {
+      if (ai.action === 'NOT_LEAD' || ai.intent === 'other') {
+        await markProcessed();
+        return this.stopNotLead(lead, newText);
+      }
+      if (ai.intent === 'course') {
+        lead.intent = 'course';
+      } else {
+        // still unclear: one clarifying question, then hand the chat to the coach
+        await markProcessed();
+        if ((lead.askCount ?? 0) >= 2) return this.stopNotLead(lead, newText);
+        lead.askCount = (lead.askCount ?? 0) + 1;
+        await lead.save();
+        await this.sendToClient(lead, messages.length ? messages.slice(0, 2) : [await this.deps.settings.text('intent_question', outLang)]);
+        return;
+      }
+    }
 
     mergeAnswers(answers, sanitizeExtracted(ai.extracted ?? {}));
     // the client answered the current question but the model did not structure it → keep raw text
@@ -368,7 +418,11 @@ export class ConversationEngine {
     const after = nextStep(answers, [...skipped]);
     lead.currentQuestion = after;
     if (after === 6) {
-      return this.finishReady(lead, 'completed', false, await this.deps.settings.text('ready_message', outLang));
+      const closing =
+        (await this.deps.settings.bool('ai_closing_message')) && messages.length && !messages.some((m) => m.includes('?'))
+          ? messages.slice(0, 2)
+          : [await this.deps.settings.text('ready_message', outLang)];
+      return this.finishReady(lead, 'completed', false, closing);
     }
 
     if (ai.action === 'NO_RESPONSE') {
@@ -381,24 +435,35 @@ export class ConversationEngine {
       return;
     }
 
-    // ASK_NEXT — make sure the asked question is the one the backend expects
-    const canonical = await questionText(after, outLang, lead.bmi ?? undefined, this.deps.settings);
+    // ASK_NEXT — trust the model's wording; correct it only when it asks the wrong question
+    const recentAi = await this.recentAiTexts(lead, 4);
+    const canonical = stripLeadingAck(await questionText(after, outLang, lead.bmi ?? undefined, this.deps.settings));
     const bandChanged =
       after === 2 &&
+      ai.question === 2 &&
       bmiBand(bmiPre, await this.deps.settings.num('bmi_high'), await this.deps.settings.num('bmi_low')) !==
         bmiBand(lead.bmi ?? undefined, await this.deps.settings.num('bmi_high'), await this.deps.settings.num('bmi_low'));
+    const askedWrong = ai.question !== null && ai.question !== undefined && ai.question !== after;
+    const alreadyAsked = lead.lastAskedStep === after;
     let out = messages;
-    const askedOther = ai.question !== null && ai.question !== undefined && ai.question !== after;
-    const askedNothing = !out.some((m) => m.includes('?'));
-    if (after !== 1 && (askedOther || bandChanged || askedNothing || out.length === 0)) {
-      // keep the model's short side answer (no question in it), then ask the canonical question
-      const side = out.filter((m) => !m.includes('?') && !/^(tushunarli|понятно|hop|ok)[.!]?$/i.test(m.trim()));
-      out = [...side.slice(0, 1), canonical];
-    } else if (after === 1 && out.length === 0) {
-      out = [`${missingHint(answers, 1)}?`];
+    if (askedWrong || bandChanged || (!alreadyAsked && !out.some((m) => m.includes('?')))) {
+      // keep the model's side answer, then ask the expected question with a fresh acknowledgement
+      const side = out.filter((m) => !m.includes('?') && !isBareAck(m));
+      const ack = side.length ? '' : pickAck(await this.deps.settings.text('ack_words', outLang), recentAi, (lead.askCount ?? 0) + after + recentAi.length);
+      out = [...side.slice(0, 2), ack ? `${ack}. ${canonical}` : canonical];
     }
-    lead.askCount = lead.lastAskedStep === after ? (lead.askCount ?? 0) + 1 : 1;
-    lead.lastAskedStep = after;
+    // never send the exact same text twice in a row
+    const seen = new Set(recentAi.map((m) => normalize(m)));
+    out = out.filter((m) => !seen.has(normalize(m)));
+    if (!out.length) {
+      await lead.save();
+      return;
+    }
+    const asksNow = out.some((m) => m.includes('?'));
+    if (asksNow) {
+      lead.askCount = lead.lastAskedStep === after ? (lead.askCount ?? 0) + 1 : 1;
+      lead.lastAskedStep = after;
+    }
     await lead.save();
     await this.sendToClient(lead, out.slice(0, 3));
     void this.maybeSummarize(lead).catch(() => undefined);
@@ -444,6 +509,11 @@ export class ConversationEngine {
       missing: missingHint(answers, step),
       botAnswer: await s.text('bot_answer', lang),
       priceReply: await s.text('price_reply', lang),
+      courseInfo: await s.get('course_info'),
+      results: await s.get('coach_results'),
+      ackWords: await s.text('ack_words', lang),
+      intentPending: lead.intent === 'asked',
+      lastAiMessages: (await this.recentAiTexts(lead, 3)).reverse(),
       summary: lead.summary,
       history,
       newMessages,
@@ -467,7 +537,7 @@ export class ConversationEngine {
   }
 
   /** [TAYYOR] / [TAYYOR: ehtiyot]: send final text, switch to MANUAL/READY, card to the coach. */
-  private async finishReady(lead: LeadDoc, reason: ReadyReason, urgent: boolean, text: string): Promise<void> {
+  private async finishReady(lead: LeadDoc, reason: ReadyReason, urgent: boolean, text: string | string[]): Promise<void> {
     lead.status = 'READY';
     lead.readyReason = reason;
     lead.urgent = urgent || lead.urgent;
@@ -475,13 +545,35 @@ export class ConversationEngine {
     lead.pendingSince = undefined;
     await lead.save();
     // the final message is the only one allowed after the decision; mode flips right after it
-    await this.sendToClient(lead, [text], { final: true });
+    await this.sendToClient(lead, Array.isArray(text) ? text : [text], { final: true });
     lead.mode = 'MANUAL';
     await lead.save();
     this.cancel(String(lead._id));
     await AdminEvent.create({ type: urgent ? 'tayyor_ehtiyot' : 'tayyor', leadId: lead._id, data: { reason } });
     logger.info({ leadId: String(lead._id), reason, urgent }, urgent ? '[TAYYOR: ehtiyot]' : '[TAYYOR]');
     await this.deps.leads.sendCard(lead);
+  }
+
+  /** Not a course lead: the AI stays silent and the chat goes to the coach without a lead card. */
+  private async stopNotLead(lead: LeadDoc, text: string): Promise<void> {
+    lead.intent = 'other';
+    lead.mode = 'MANUAL';
+    lead.readyReason = 'not_lead';
+    lead.pendingSince = undefined;
+    await lead.save();
+    this.cancel(String(lead._id));
+    await AdminEvent.create({ type: 'not_lead', leadId: lead._id });
+    logger.info({ leadId: String(lead._id) }, 'Not a course lead — AI stopped');
+    await this.deps.gateway
+      .notifyAdmins(
+        `💬 Kurs bo'yicha emas (AI to'xtadi): <a href="tg://user?id=${lead.telegramId}">${escapeHtml(displayName(lead))}</a>${lead.username ? ' @' + escapeHtml(lead.username) : ''}\n<i>${escapeHtml(text.slice(0, 300))}</i>`,
+      )
+      .catch(() => undefined);
+  }
+
+  private async recentAiTexts(lead: LeadDoc, n: number): Promise<string[]> {
+    const docs = await Message.find({ leadId: lead._id, sender: 'ai' }).sort({ createdAt: -1 }).limit(n).select('text').lean();
+    return docs.map((d) => d.text);
   }
 
   // ───────────────────────────── sending ─────────────────────────────
@@ -501,6 +593,11 @@ export class ConversationEngine {
         await this.typing(lead, text);
         const again = await Lead.findById(lead._id).select('mode').lean();
         if (again?.mode !== 'AI') break;
+        if (!opts.final && (await Message.exists({ leadId: lead._id, sender: 'client', processed: false }))) {
+          // the client is still writing — stop here, the next batch is answered together
+          logger.info({ leadId: String(lead._id) }, 'Send interrupted by a new client message');
+          break;
+        }
         const res = await this.deps.gateway.sendBusinessMessage(lead.businessConnectionId, lead.chatId, text);
         await Message.create({
           leadId: lead._id,
@@ -590,6 +687,8 @@ export function plainAnswers(lead: { answers?: unknown }): LeadAnswers {
   const obj = (a && typeof (a as { toObject?: unknown }).toObject === 'function' ? (a as { toObject: () => Record<string, unknown> }).toObject() : (a ?? {})) as Record<string, unknown>;
   return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== null && v !== undefined)) as LeadAnswers;
 }
+
+const isBareAck = (m: string) => /^(tushunarli|tushundim|aha|zo'r|yaxshi|hop|ok|понятно|ясно|хорошо|ага)[.!]?$/i.test(m.trim());
 
 function mergeAnswers(target: LeadAnswers, src: LeadAnswers): void {
   for (const [k, v] of Object.entries(src) as Array<[keyof LeadAnswers, unknown]>) {

@@ -39,6 +39,8 @@ const LeadSchema = new Schema(
     bmi: Number,
     targetBmi: Number,
     currentQuestion: { type: Number, default: 1 },
+    /** asked = «kurs bo'yichami?» sent; course = lead; other = not a lead (handed to the coach silently). */
+    intent: { type: String, enum: ['asked', 'course', 'other'] },
     lastAskedStep: Number,
     askCount: { type: Number, default: 0 },
     skippedSteps: { type: [Number], default: [] },

@@ -27,11 +27,22 @@ Asosiy manba — texnik topshiriq (2-versiya) va system prompt v3.2. Prompt matn
 | Admin buyruqlari: `/navbat`, `/stats`, `/export` va barcha sozlamalar | `src/admin/adminCommands.ts` |
 | **Mini ilova**: mijozlar jadvali, kartochka, «Chatni ochish», mijozga yozish, status, «Murabbiy haqida», sozlamalar, uslub, manbalar | `src/webapp/*` |
 
+### Suhbat xulqi
+
+- **Mijoz yozib bo'lishini kutadi.** Har yangi xabar taymerni qaytadan boshlaydi: oxirgi xabardan keyin 30 soniya, ovozli xabardan keyin +10 soniya, birinchi xabarda 12 soniya. Telegram botlarga "yozmoqda" holatini bermaydi, shuning uchun jimlik kutiladi. Bot javob yozayotganda mijoz yana yozsa, qolgan xabarlar yuborilmaydi va hammasiga birga javob beriladi.
+- **Ovozli xabarlar** navbatdagi partiya bilan birga matnga aylantiriladi.
+- **Avval maqsad aniqlanadi.** Reklama linkidan kelmagan va maqsadi aniq bo'lmagan mijozdan "Kurs bo'yicha yozyapsizmi?" deb so'raladi. Boshqa masalada bo'lsa, AI hech narsa yozmaydi, chat Temurga o'tadi va adminga xabar boradi.
+- **Javobi bor savollar o'tkazib yuboriladi**, javob bir nechta xabar yoki ovozli xabarda kelgan bo'lsa ham.
+- **Savollar AI'ning o'z so'zi bilan beriladi.** Tasdiq so'zlari almashib turadi (Aha, Zo'r, Hop…). Bir xil matn ketma-ket ikki marta yuborilmaydi.
+- **Natijalar, kurs va narx haqidagi savollarga** AI "Murabbiy haqida", "Kurs haqida" va "O'quvchilar natijalari" ma'lumotlari bilan javob beradi va mijozni motivatsiya qiladi. U yerda yo'q narsani o'zidan to'qimaydi.
+- **Anketa tugaganda** AI qisqa, tabiiy yakuniy xabar yozadi. Xavfli holatlarda faqat "Tushunarli" yuboriladi.
+
 ### Admin nimalarni o'zgartira oladi (kod yozmasdan)
 
 Bot ichida (`/settings`, `/set`, `/prompt`) yoki mini ilovaning **Sozlamalar** bo'limida quyidagilarni o'zgartirish mumkin:
 - system prompt va uslub profili;
-- murabbiy ismi va **murabbiy haqida ma'lumot** (AI rejadan tashqari savolga faqat shu faktlar bilan javob beradi);
+- murabbiy ismi, **murabbiy haqida**, **kurs haqida** (narx ham bo'lishi mumkin) va **o'quvchilar natijalari** — AI savollarga faqat shu faktlar bilan javob beradi;
+- "kurs bo'yichami?" savoli, tasdiq so'zlari, kutish vaqtlari;
 - birinchi xabar, 2–5 savollar (UZ va RU);
 - narx savoliga javob, «botmisiz?» savoliga javob, yakuniy «Tushunarli»;
 - eslatma matnlari va vaqtlari;

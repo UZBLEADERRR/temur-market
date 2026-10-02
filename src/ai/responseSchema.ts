@@ -27,7 +27,7 @@ export const ExtractedSchema = z
   .partial()
   .catch({});
 
-export const AI_ACTIONS = ['ASK_NEXT', 'READY', 'URGENT_READY', 'NO_RESPONSE', 'PAUSE'] as const;
+export const AI_ACTIONS = ['ASK_NEXT', 'READY', 'URGENT_READY', 'NO_RESPONSE', 'PAUSE', 'NOT_LEAD'] as const;
 
 export const AiResponseSchema = z.preprocess(
   (raw) => {
@@ -48,6 +48,7 @@ export const AiResponseSchema = z.preprocess(
     language: z.enum(['uz', 'ru']).nullish().catch(null),
     answered_current: z.boolean().nullish().catch(null),
     question: z.coerce.number().int().min(1).max(5).nullish().catch(null),
+    intent: z.enum(['course', 'other', 'unclear']).nullish().catch(null),
     extracted: ExtractedSchema.nullish(),
   }),
 );

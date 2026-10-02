@@ -35,7 +35,7 @@ export async function questionText(
 ): Promise<string> {
   switch (step) {
     case 1:
-      return settings.text('first_message', lang);
+      return settings.text('q1', lang);
     case 2: {
       const band = bmiBand(bmi, await settings.num('bmi_high'), await settings.num('bmi_low'));
       return settings.text(`q2_${band}`, lang);
@@ -66,4 +66,19 @@ export function missingHint(answers: LeadAnswers, step: QuestionStep): string {
     healthProblems: "sog'liq muammolari",
   };
   return missingFields(answers, step).map((f) => names[f] ?? f).join(', ');
+}
+
+/** Picks an acknowledgement word different from the ones used in the last bot messages. */
+export function pickAck(ackList: string, recent: string[], seed: number): string {
+  const acks = ackList.split(',').map((s) => s.trim()).filter(Boolean);
+  if (!acks.length) return '';
+  const used = recent.map((m) => m.toLowerCase());
+  const fresh = acks.filter((a) => !used.some((u) => u.startsWith(a.toLowerCase())));
+  const pool = fresh.length ? fresh : acks;
+  return pool[Math.abs(seed) % pool.length];
+}
+
+/** Removes a leading acknowledgement ("Tushunarli.", "Понятно,") from a question text. */
+export function stripLeadingAck(text: string): string {
+  return text.replace(/^\s*(tushunarli|tushundim|aha|понятно|ясно)[.!,]?\s*/i, '');
 }

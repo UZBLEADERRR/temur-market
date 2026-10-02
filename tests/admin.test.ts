@@ -67,7 +67,7 @@ describe('admin', () => {
 
   it('lead status buttons: ANSWERED → PAID / REJECTED with timestamps, card is refreshed', async () => {
     const { engine, leads, gateway } = buildApp();
-    await engine.handleClientMessage(clientMsg(60, 'Salom'));
+    await engine.handleClientMessage(clientMsg(60, 'Salom, kurs haqida'));
     await engine.handleClientMessage(clientMsg(60, 'Temur bilan gaplashmoqchiman'));
     const lead = await Lead.findOne({ chatId: 60 });
     await leads.setStatus(String(lead!._id), 'ANSWERED', 1);
@@ -105,7 +105,7 @@ describe('mini app API', () => {
 
   it('lists leads, opens one, writes to the client as the coach (AI turns off), edits settings', async () => {
     const { srv, call, engine, gateway } = await server();
-    await engine.handleClientMessage(clientMsg(61, 'Salom'));
+    await engine.handleClientMessage(clientMsg(61, 'Salom, kurs haqida'));
     const list = (await (await call('/leads?status=QUESTIONNAIRE')).json()) as Array<{ id: string; name: string }>;
     expect(list).toHaveLength(1);
     const detail = (await (await call(`/leads/${list[0].id}`)).json()) as { lead: { businessConnectionId?: string }; messages: unknown[] };

@@ -18,6 +18,7 @@ const REASON_LABEL: Record<string, string> = {
   safety: "Xavfli holat (ochlik/qusish/o'ziga zarar)",
   low_target_bmi: 'Maqsad TMI juda past',
   manual_takeover: "Murabbiy o'zi yozdi",
+  not_lead: "Kurs bo'yicha emas",
 };
 
 export const statusLabel = (s: string) => STATUS_LABEL[s] ?? s;

@@ -28,6 +28,21 @@ export const SETTINGS_SPEC: SettingDef[] = [
     default:
       "Sertifikatli murabbiy (NPCA, MUSA, WNGP Korea), natural bodibilder, 100 dan ortiq mijoz bilan ishlagan. Onlayn ishlaydi: individual va guruh formatida.",
   },
+  {
+    key: 'course_info',
+    label: "Kurs haqida (dastur, format, davomiylik, narx — AI shu ma'lumot bilan javob beradi)",
+    group: 'Murabbiy',
+    type: 'longtext',
+    default:
+      "Onlayn kurs: individual ratsion va trenirovka dasturi, har kuni nazorat, ovqatlar guruhga tashlab boriladi, har 10 kunda vazn va progress rasm. Zalda ham, uyda ham ishlasa bo'ladi.",
+  },
+  {
+    key: 'coach_results',
+    label: "O'quvchilar natijalari (AI faqat shulardan misol keltiradi)",
+    group: 'Murabbiy',
+    type: 'longtext',
+    default: "100 ga yaqin odam 40 kunlik tizimda yaxshi natija qilgan. Natija har kimning harakatiga bog'liq, kafolat berilmaydi.",
+  },
   { key: 'system_prompt', label: 'System prompt', group: 'AI', type: 'longtext', default: DEFAULT_SYSTEM_PROMPT },
   { key: 'style_profile', label: 'Uslub profili', group: 'AI', type: 'longtext', default: DEFAULT_STYLE_PROFILE },
   {
@@ -49,22 +64,34 @@ export const SETTINGS_SPEC: SettingDef[] = [
     'Здравствуйте! Можете коротко рассказать о себе? Рост, вес, возраст. Есть опыт тренировок?',
   ),
   ...q(
+    'intent_question',
+    'Kurs bo\'yichami? (maqsadni aniqlash savoli)',
+    "Assalomu alaykum! Kurs bo'yicha yozyapsizmi yoki boshqa masalada?",
+    'Здравствуйте! Вы по поводу курса или по другому вопросу?',
+  ),
+  ...q(
+    'q1',
+    '1-savol (salomlashuvsiz)',
+    "O'zingiz haqingizda qisqacha ma'lumot berib yubora olasizmi? Bo'y, ves, yosh. Trenirovka tajribangiz bormi?",
+    'Можете коротко рассказать о себе? Рост, вес, возраст. Есть опыт тренировок?',
+  ),
+  ...q(
     'q2_high',
     '2-savol, TMI ≥ yuqori chegara',
-    'Tushunarli. Maqsad nechiga tushish? Qancha vazn norma hisoblaysiz?',
-    'Понятно. Цель — до скольки похудеть? Какой вес считаете нормой?',
+    'Maqsad nechiga tushish? Qancha vazn norma hisoblaysiz?',
+    'Цель — до скольки похудеть? Какой вес считаете нормой?',
   ),
   ...q(
     'q2_low',
     '2-savol, TMI < past chegara',
-    'Tushunarli. Maqsad massa olishmi? Necha kiloga chiqmoqchisiz?',
-    'Понятно. Цель — набрать массу? До скольки кг хотите выйти?',
+    'Maqsad massa olishmi? Necha kiloga chiqmoqchisiz?',
+    'Цель — набрать массу? До скольки кг хотите выйти?',
   ),
   ...q(
     'q2_mid',
     '2-savol, oraliq TMI',
-    'Tushunarli. Maqsad nima: ozishmi, massa olishmi yoki shaklga kirish?',
-    'Понятно. Какая цель: похудеть, набрать массу или прийти в форму?',
+    'Maqsad nima: ozishmi, massa olishmi yoki shaklga kirish?',
+    'Какая цель: похудеть, набрать массу или прийти в форму?',
   ),
   ...q(
     'q3',
@@ -91,7 +118,13 @@ export const SETTINGS_SPEC: SettingDef[] = [
     "Ha, savollarga AI-yordamchim javob beryapti, lekin hammasini o'zim ko'rib turibman. Hozir o'zim yozaman.",
     'Да, на вопросы отвечает мой AI-помощник, но я всё вижу сам. Сейчас сам напишу.',
   ),
-  ...q('ready_message', '[TAYYOR] dagi yakuniy xabar', 'Tushunarli', 'Понятно'),
+  ...q('ready_message', '[TAYYOR] dagi yakuniy xabar (AI yozmasa / ehtiyot holatida)', 'Tushunarli', 'Понятно'),
+  ...q(
+    'ack_words',
+    "Tasdiq so'zlari (vergul bilan, AI har safar boshqasini ishlatadi)",
+    "Tushunarli, Aha, Zo'r, Yaxshi, Hop, Ajoyib, Tushundim, Mayli, Bo'ldi aka, Yaxshi gap",
+    'Понятно, Ага, Отлично, Хорошо, Супер, Ясно, Окей',
+  ),
   ...q('reminder1', '1-eslatma matni', 'Javobingizni kutyapman', 'Жду ваш ответ'),
   ...q(
     'reminder2',
@@ -100,6 +133,8 @@ export const SETTINGS_SPEC: SettingDef[] = [
     'Здравствуйте. Ответьте, пожалуйста, на вопросы, потом сам всё подробно расскажу',
   ),
 
+  { key: 'ask_intent', label: "Birinchi xabarda «kurs bo'yichami?» deb so'rash", group: 'Xulq', type: 'boolean', default: true },
+  { key: 'ai_closing_message', label: "Anketa tugaganda AI tabiiy yakuniy xabar yozsin (o'chiq = faqat «Tushunarli»)", group: 'Xulq', type: 'boolean', default: true },
   { key: 'reminder1_delay_minutes', label: '1-eslatma (daqiqa)', group: 'Eslatmalar', type: 'number', default: 60 },
   { key: 'reminder2_delay_hours', label: '2-eslatma (soat, mijoz oxirgi xabaridan)', group: 'Eslatmalar', type: 'number', default: 20 },
 
@@ -107,10 +142,20 @@ export const SETTINGS_SPEC: SettingDef[] = [
   { key: 'bmi_low', label: 'TMI past chegara (massa savoli)', group: 'TMI', type: 'number', default: 21 },
   { key: 'min_target_bmi', label: 'Maqsad TMI minimum (pastda → ehtiyot)', group: 'TMI', type: 'number', default: 18.5 },
 
-  { key: 'debounce_seconds', label: "Ketma-ket xabarlarni yig'ish (soniya)", group: 'Xulq', type: 'number', default: 6 },
+  { key: 'debounce_seconds', label: "Mijoz yozib bo'lishini kutish, soniya (oxirgi xabardan keyin)", group: 'Xulq', type: 'number', default: 30 },
+  { key: 'debounce_first_seconds', label: 'Birinchi xabardan keyin kutish (soniya)', group: 'Xulq', type: 'number', default: 12 },
+  { key: 'debounce_voice_extra_seconds', label: "Ovozli xabardan keyin qo'shimcha kutish (soniya)", group: 'Xulq', type: 'number', default: 10 },
   { key: 'typing_ms_per_char', label: '«Yozmoqda» tezligi (ms/belgi)', group: 'Xulq', type: 'number', default: 45 },
   { key: 'typing_max_ms', label: '«Yozmoqda» maksimum (ms)', group: 'Xulq', type: 'number', default: 6000 },
 
+  {
+    key: 'course_keywords',
+    label: "Kurs bo'yicha yozganini bildiruvchi so'zlar",
+    group: 'Kalit so\'zlar',
+    type: 'longtext',
+    default:
+      "kurs, курс, ozish, ozmoq, ozay, vazn, ves tashla, massa, trenirovka, mashg'ulot, programma, dastur, marafon, narx, narxi, qatnash, yozilmoq, yozilsam, ratsion, pitaniya, sport, zal, похуд, трениров, программ, записат, марафон, цена, сколько стоит, питани, набрать",
+  },
   {
     key: 'safety_keywords',
     label: "Xavfli so'zlar (ehtiyot) — vergul bilan",

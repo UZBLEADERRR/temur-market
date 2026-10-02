@@ -49,7 +49,7 @@ function bm(chatId: number, fromId: number, messageId: number, text: string, ext
 describe('Telegram Business handlers', () => {
   it('16. duplicate Telegram message is processed only once', async () => {
     const { bot, gateway } = makeBot();
-    const u = bm(100, 100, 1, 'Salom');
+    const u = bm(100, 100, 1, 'Salom, kurs haqida');
     await bot.handleUpdate(u);
     await bot.handleUpdate({ ...u, update_id: uid++ }); // same message re-delivered
     expect(gateway.textsTo(100)).toHaveLength(1);
@@ -58,13 +58,13 @@ describe('Telegram Business handlers', () => {
 
   it('client message → AI replies through the business connection (as TEMUR)', async () => {
     const { bot, gateway } = makeBot();
-    await bot.handleUpdate(bm(101, 101, 1, 'Salom'));
+    await bot.handleUpdate(bm(101, 101, 1, 'Salom, kurs haqida'));
     expect(gateway.sent[0]).toMatchObject({ chatId: 101, connectionId: 'conn-1' });
   });
 
   it('message written by TEMUR in the chat → manual takeover, no AI reply afterwards', async () => {
     const { bot, gateway } = makeBot();
-    await bot.handleUpdate(bm(102, 102, 1, 'Salom'));
+    await bot.handleUpdate(bm(102, 102, 1, 'Salom, kurs haqida'));
     await bot.handleUpdate(bm(102, OWNER, 2, 'Salom, men Temur'));
     await bot.handleUpdate(bm(102, 102, 3, '180 90 25'));
     expect(gateway.textsTo(102)).toHaveLength(1);
@@ -74,7 +74,7 @@ describe('Telegram Business handlers', () => {
 
   it("the bot's own messages echoed back (sender_business_bot) do not count as TEMUR takeover", async () => {
     const { bot } = makeBot();
-    await bot.handleUpdate(bm(103, 103, 1, 'Salom'));
+    await bot.handleUpdate(bm(103, 103, 1, 'Salom, kurs haqida'));
     await bot.handleUpdate(bm(103, OWNER, 2, 'Assalomu alaykum!', { sender_business_bot: { id: 1, is_bot: true, first_name: 'Bot' } }));
     expect((await Lead.findOne({ chatId: 103 }))?.mode).toBe('AI');
   });
