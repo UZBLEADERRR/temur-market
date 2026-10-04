@@ -49,6 +49,26 @@ Asosiy manba — texnik topshiriq (2-versiya) va system prompt v3.2. Prompt matn
 
   Botda ham shunday buyruqlar bor: `/reset <id>`, `/always_on <id>`, `/always_off <id>`.
 
+### Sotuv (anketadan keyin)
+
+Bu oqim `sales_mode` sozlamasi yoqilganda ishlaydi (standart holatda yoqilgan).
+1. 5 ta savol tugagach, Temurga "📋 ANKETA TUGADI — AI kursni sotyapti" kartochkasi keladi. Lead holati **SALES** (Sotuvda) bo'ladi.
+2. AI mijozning javoblariga tayanib mos format taklif qiladi. Narx, tarif va to'lov ma'lumotini faqat "Kurs haqida" bo'limidan oladi. E'tirozlarga o'quvchilar natijalari bilan javob beradi va har xabarda bitta savol bilan suhbatni oldinga suradi.
+3. Mijoz to'lov qilganini aytsa yoki chek skrinshotini yuborsa (AI rasmni ko'radi), AI minnatdorchilik bildiradi va "tekshirib, guruh linkini yuboraman" deydi. Shundan keyin to'xtaydi va Temurga **"💰 SOTILDI — guruh linkini yuboring"** kartochkasi keladi. Guruh linkini Temur o'zi yuboradi.
+4. Mijoz rad etsa, AI xushmuomala xayrlashadi va "❌ Kursdan voz kechdi" kartochkasi keladi.
+5. Bazada yo'q chegirma so'ralsa yoki mijoz Temurning o'zini so'rasa, chat Temurga o'tadi.
+6. Sotuv skripti mini ilovada **Sozlamalar → AI → Sotuv skripti** bo'limida tahrirlanadi.
+
+Sotuv bosqichidagi eslatma: "Qaror qildingizmi? Savollaringiz bo'lsa bemalol yozing".
+
+### Temur o'zi yozsa
+
+Standart holatda AI **to'xtamaydi**:
+- Temurning xabari tarixda "Temur (O'ZI yozgan)" deb belgilanadi va AI uni ustun deb biladi: aytilgan narx, chegirma yoki ko'rsatmaga amal qiladi, unga zid gapirmaydi.
+- Mijozning Temur javob bergan xabarlariga AI qayta javob bermaydi.
+
+Eski xulq (Temur yozsa AI butunlay o'chadi) kerak bo'lsa, `coach_message_stops_ai` sozlamasini yoqing.
+
 ### Admin nimalarni o'zgartira oladi (kod yozmasdan)
 
 Bot ichida (`/settings`, `/set`, `/prompt`) yoki mini ilovaning **Sozlamalar** bo'limida quyidagilarni o'zgartirish mumkin:

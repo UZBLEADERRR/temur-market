@@ -43,6 +43,22 @@ export const SETTINGS_SPEC: SettingDef[] = [
     type: 'longtext',
     default: "100 ga yaqin odam 40 kunlik tizimda yaxshi natija qilgan. Natija har kimning harakatiga bog'liq, kafolat berilmaydi.",
   },
+  {
+    key: 'sales_prompt',
+    label: 'Sotuv skripti (anketadan keyin AI shu bo\'yicha kursni sotadi)',
+    group: 'AI',
+    type: 'longtext',
+    default: `Anketa tugadi. Endi vazifang — kursni oxirigacha sotish, xuddi {{coach_name}}dek: samimiy, qisqa, ishonchli.
+1. Mijozning javoblariga tayan: uning maqsadi, oldin nima xalaqit bergani, vaqti (zal/uy). Unga aynan qanday yordam berishimizni 1–2 qisqa xabarda ayt.
+2. KURS HAQIDA ma'lumotdan mos formatni taklif qil: nima kiradi, davomiyligi, narxi. Faqat bazadagi narx, tarif va shartlarni ayt. Chegirma, bonus, kafolat yoki muddatni o'zingdan to'qima.
+3. Har xabarda bitta savol bilan suhbatni oldinga sur: «Sizga qaysi format to'g'ri keladi?», «Boshlaymizmi?».
+4. E'tirozlarga (qimmat, vaqt yo'q, ishonmayman, keyinroq, o'ylab ko'raman) samimiy va qisqa javob ber, O'QUVCHILAR NATIJALARIdan mos misol keltir. Bosim o'tkazma, yolg'on shoshilinchlik yaratma.
+5. Mijoz rozi bo'lsa — bazadagi to'lov ma'lumotini (karta, summa, qanday to'lash) aniq ber va to'lovdan keyin chek (skrinshot) yuborishini so'ra.
+6. Mijoz to'lov qildim desa yoki chek/skrinshot yuborsa → action=SOLD, reason=paid. Qisqa minnatdorchilik va «tekshirib, guruh linkini yuboraman» de. Linkni o'zing yuborma, to'lovni tasdiqlama.
+7. Bazada to'lov ma'lumoti bo'lmasa: mijoz aniq rozi bo'lganda → action=SOLD, reason=agreed, «hozir o'zim to'lov va guruh bo'yicha yozaman» de.
+8. Mijoz qat'iy rad etsa → action=REFUSED, xushmuomala xayrlash (eshik ochiq qolsin).
+9. Bazada yo'q chegirma yoki maxsus shart so'rasa yoki murabbiyning o'zini so'rasa → action=READY, reason=wants_coach.`,
+  },
   { key: 'system_prompt', label: 'System prompt', group: 'AI', type: 'longtext', default: DEFAULT_SYSTEM_PROMPT },
   { key: 'style_profile', label: 'Uslub profili', group: 'AI', type: 'longtext', default: DEFAULT_STYLE_PROFILE },
   {
@@ -118,6 +134,12 @@ export const SETTINGS_SPEC: SettingDef[] = [
     "Ha, savollarga AI-yordamchim javob beryapti, lekin hammasini o'zim ko'rib turibman. Hozir o'zim yozaman.",
     'Да, на вопросы отвечает мой AI-помощник, но я всё вижу сам. Сейчас сам напишу.',
   ),
+  ...q(
+    'sales_reminder',
+    'Sotuv bosqichidagi eslatma',
+    "Qaror qildingizmi? Savollaringiz bo'lsa bemalol yozing",
+    'Решили? Если есть вопросы — пишите',
+  ),
   ...q('ready_message', '[TAYYOR] dagi yakuniy xabar (AI yozmasa / ehtiyot holatida)', 'Tushunarli', 'Понятно'),
   ...q(
     'ack_words',
@@ -133,6 +155,14 @@ export const SETTINGS_SPEC: SettingDef[] = [
     'Здравствуйте. Ответьте, пожалуйста, на вопросы, потом сам всё подробно расскажу',
   ),
 
+  { key: 'sales_mode', label: 'Anketadan keyin AI kursni oxirigacha sotsin', group: 'Xulq', type: 'boolean', default: true },
+  {
+    key: 'coach_message_stops_ai',
+    label: "Murabbiy o'zi yozsa AI to'xtasin (o'chiq = AI murabbiy xabarini hisobga olib davom etadi)",
+    group: 'Xulq',
+    type: 'boolean',
+    default: false,
+  },
   { key: 'allow_advice', label: "Umumiy murabbiy maslahatlari berishi mumkin", group: 'Xulq', type: 'boolean', default: true },
   { key: 'flood_limit', label: "Spam himoyasi: 5 daqiqada maksimum xabar (oshsa AI to'xtaydi)", group: 'Xulq', type: 'number', default: 40 },
   { key: 'max_images_per_turn', label: "Bir javobda AI ko'radigan maksimum rasm", group: 'Xulq', type: 'number', default: 3 },

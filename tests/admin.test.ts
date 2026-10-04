@@ -103,7 +103,7 @@ describe('mini app API', () => {
     srv.close();
   });
 
-  it('lists leads, opens one, writes to the client as the coach (AI turns off), edits settings', async () => {
+  it('lists leads, opens one, writes to the client as the coach (AI keeps going), edits settings', async () => {
     const { srv, call, engine, gateway } = await server();
     await engine.handleClientMessage(clientMsg(61, 'Salom, kurs haqida'));
     const list = (await (await call('/leads?status=QUESTIONNAIRE')).json()) as Array<{ id: string; name: string }>;
@@ -116,8 +116,9 @@ describe('mini app API', () => {
     expect(res.status).toBe(200);
     expect(gateway.textsTo(61).at(-1)).toBe('Salom, bu Temur');
     const lead = await Lead.findById(list[0].id);
-    expect(lead?.mode).toBe('MANUAL');
-    expect(lead?.status).toBe('ANSWERED');
+    // by default the AI continues and takes the coach's message into account
+    expect(lead?.mode).toBe('AI');
+    expect(lead?.status).toBe('QUESTIONNAIRE');
 
     const put = await call('/settings', { method: 'PUT', body: { values: { coach_info: 'Yangi info', reminder1_delay_minutes: '45' } } });
     expect(put.status).toBe(200);

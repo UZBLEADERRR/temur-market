@@ -66,6 +66,10 @@ const LeadSchema = new Schema(
     lastClientMessageAt: Date,
     lastOutgoingAt: Date,
     readyAt: Date,
+    /** Questionnaire finished (sales stage started). */
+    questionnaireDoneAt: Date,
+    /** AI closed the sale (client paid / agreed) — the coach sends the group link. */
+    soldAt: Date,
     answeredAt: Date,
     paidAt: Date,
     rejectedAt: Date,

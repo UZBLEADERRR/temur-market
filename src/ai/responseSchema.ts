@@ -27,7 +27,7 @@ export const ExtractedSchema = z
   .partial()
   .catch({});
 
-export const AI_ACTIONS = ['ASK_NEXT', 'READY', 'URGENT_READY', 'NO_RESPONSE', 'PAUSE', 'NOT_LEAD'] as const;
+export const AI_ACTIONS = ['ASK_NEXT', 'READY', 'URGENT_READY', 'NO_RESPONSE', 'PAUSE', 'NOT_LEAD', 'SOLD', 'REFUSED'] as const;
 
 export const AiResponseSchema = z.preprocess(
   (raw) => {
@@ -42,7 +42,7 @@ export const AiResponseSchema = z.preprocess(
     messages: z.array(z.string().max(1000)).max(4).default([]),
     action: z.enum(AI_ACTIONS),
     reason: z
-      .enum(['completed', 'wants_coach', 'bot_question', 'safety', 'low_target_bmi', 'other'])
+      .enum(['completed', 'wants_coach', 'bot_question', 'safety', 'low_target_bmi', 'paid', 'agreed', 'refused', 'other'])
       .nullish()
       .catch(null),
     language: z.enum(['uz', 'ru']).nullish().catch(null),

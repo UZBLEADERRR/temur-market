@@ -15,7 +15,7 @@ import type { SettingsService } from '../services/settings';
 import { retrieveExamples } from '../style/examples';
 import { isChatClosedError, type TelegramGateway } from '../telegram/gateway';
 import type { LeadAnswers, LeadStatus, QuestionStep, ReadyReason } from '../types/domain';
-import { containsAny, detectLanguage, escapeHtml, isGreetingOnly, normalize, splitKeywords, type Lang } from '../utils/text';
+import { containsAny, detectLanguage, escapeHtml, fillTemplate, isGreetingOnly, normalize, splitKeywords, type Lang } from '../utils/text';
 import { KeyedMutex } from '../utils/limiter';
 import { sleep } from '../utils/time';
 import { logger } from '../utils/logger';
@@ -46,7 +46,7 @@ export interface EngineOptions {
   now?: () => Date;
 }
 
-const ACTIVE_STATUSES: LeadStatus[] = ['NEW', 'QUESTIONNAIRE'];
+const ACTIVE_STATUSES: LeadStatus[] = ['NEW', 'QUESTIONNAIRE', 'SALES'];
 
 export function isAiActive(lead: { mode?: string | null; status?: string | null; alwaysOn?: boolean | null }): boolean {
   return lead.mode === 'AI' && (ACTIVE_STATUSES.includes(lead.status as LeadStatus) || Boolean(lead.alwaysOn));
@@ -170,10 +170,21 @@ export class ConversationEngine {
 
   /** Marks a chat as handled by the coach (manual message from Telegram or from the mini app). */
   async takeover(lead: LeadDoc, why: string): Promise<void> {
-    if (lead.alwaysOn) {
-      // AI stays on by admin decision; the coach's message just becomes part of the history
+    const stops = !lead.alwaysOn && (await this.deps.settings.bool('coach_message_stops_ai'));
+    if (!stops) {
+      // the coach answered himself: what the client wrote so far is covered by his message;
+      // the AI keeps going and takes the coach's words into account on the next client message
+      this.cancel(String(lead._id));
+      await Message.updateMany({ leadId: lead._id, processed: false }, { $set: { processed: true } });
+      lead.pendingSince = undefined;
       lead.lastOutgoingAt = this.now();
+      if (lead.status === 'READY') {
+        lead.status = 'ANSWERED';
+        lead.answeredAt ??= this.now();
+      }
       await lead.save();
+      await AdminEvent.create({ type: 'coach_message', leadId: lead._id, data: { why } });
+      await this.deps.leads.refreshCards(lead);
       return;
     }
     this.cancel(String(lead._id));
@@ -322,6 +333,10 @@ export class ConversationEngine {
     if (containsAny(newText, coachKeywords)) {
       await markProcessed();
       return this.finishReady(lead, 'wants_coach', false, await this.deps.settings.text('ready_message', lang));
+    }
+
+    if (lead.status === 'SALES') {
+      return this.salesTurn(lead, pending.map((m) => m.text), photoIds, lang, markProcessed);
     }
 
     // 2) Deterministic extraction (numbers) before the LLM sees the message
@@ -476,6 +491,17 @@ export class ConversationEngine {
 
     const after = nextStep(answers, [...skipped]);
     lead.currentQuestion = after;
+    if (after === 6 && (await this.deps.settings.bool('sales_mode'))) {
+      // questionnaire done → the coach gets the card, the AI moves on to selling the course
+      lead.status = 'SALES';
+      lead.readyReason = 'completed';
+      lead.questionnaireDoneAt = this.now();
+      await lead.save();
+      await AdminEvent.create({ type: 'questionnaire_done', leadId: lead._id });
+      logger.info({ leadId: String(lead._id) }, 'Questionnaire complete — sales stage');
+      await this.deps.leads.sendCard(lead);
+      return this.salesTurn(lead, pending.map((m) => m.text), photoIds, outLang, async () => undefined);
+    }
     if (after === 6) {
       const closing =
         (await this.deps.settings.bool('ai_closing_message')) && messages.length && !messages.some((m) => m.includes('?'))
@@ -542,6 +568,7 @@ export class ConversationEngine {
     askedStep: QuestionStep,
     photoIds: string[] = [],
     coachMode = false,
+    salesMode = false,
   ): Promise<AiResponse> {
     const s = this.deps.settings;
     const historyLimit = await s.num('history_messages');
@@ -580,6 +607,8 @@ export class ConversationEngine {
       ackWords: await s.text('ack_words', lang),
       intentPending: lead.intent === 'asked',
       coachMode,
+      salesMode,
+      salesPrompt: salesMode ? fillTemplate(await s.get('sales_prompt'), { coach_name: await s.get('coach_name') }) : undefined,
       allowAdvice: await s.bool('allow_advice'),
       photos: photoIds.length,
       lastAiMessages: (await this.recentAiTexts(lead, 3)).reverse(),
@@ -612,6 +641,7 @@ export class ConversationEngine {
     lead.readyReason = reason;
     lead.urgent = urgent || lead.urgent;
     lead.readyAt = this.now();
+    if (reason === 'sold') lead.soldAt = this.now();
     lead.pendingSince = undefined;
     await lead.save();
     // the final message is the only one allowed after the decision; mode flips right after it
@@ -639,6 +669,41 @@ export class ConversationEngine {
         `💬 Kurs bo'yicha emas (AI to'xtadi): <a href="tg://user?id=${lead.telegramId}">${escapeHtml(displayName(lead))}</a>${lead.username ? ' @' + escapeHtml(lead.username) : ''}\n<i>${escapeHtml(text.slice(0, 300))}</i>`,
       )
       .catch(() => undefined);
+  }
+
+  /** Sales stage: the AI presents the course, handles objections and closes; then the coach sends the group link. */
+  private async salesTurn(lead: LeadDoc, newMessages: string[], photoIds: string[], lang: Lang, markProcessed: () => Promise<void>): Promise<void> {
+    const s = this.deps.settings;
+    let ai: AiResponse;
+    try {
+      ai = await this.askAi(lead, plainAnswers(lead), 6, lead.bmi ?? undefined, lang, newMessages, 6, photoIds, false, true);
+    } catch (err) {
+      await this.onAiFailure(lead, err as Error);
+      return;
+    }
+    lead.aiFailures = 0;
+    await markProcessed();
+    if (ai.language) lead.language = ai.language;
+    const outLang = (lead.language as Lang) ?? lang;
+    const recent = new Set((await this.recentAiTexts(lead, 4)).map(normalize));
+    let markerUrgent = false;
+    const out = ai.messages
+      .map((m) => {
+        const x = stripMarkers(m);
+        markerUrgent ||= x.urgent;
+        return x.text;
+      })
+      .filter((m) => m && !recent.has(normalize(m)));
+
+    if (ai.action === 'URGENT_READY' || markerUrgent) return this.finishReady(lead, 'safety', true, await s.text('ready_message', outLang));
+    if (ai.action === 'READY' && ai.reason === 'bot_question') return this.finishReady(lead, 'bot_question', false, await s.text('bot_answer', outLang));
+    if (ai.action === 'READY') return this.finishReady(lead, 'wants_coach', false, out.length ? out.slice(0, 2) : [await s.text('ready_message', outLang)]);
+    if (ai.action === 'SOLD') return this.finishReady(lead, 'sold', false, out.length ? out.slice(0, 2) : [await s.text('ready_message', outLang)]);
+    if (ai.action === 'REFUSED') return this.finishReady(lead, 'refused', false, out.slice(0, 2));
+    await lead.save();
+    if (ai.action === 'NO_RESPONSE' || !out.length) return;
+    await this.sendToClient(lead, out.slice(0, 3));
+    void this.maybeSummarize(lead).catch(() => undefined);
   }
 
   /** After the questionnaire, for "always on" clients: free conversation as the coach's assistant. */
@@ -690,7 +755,7 @@ export class ConversationEngine {
       const text = stripMarkers(raw).text;
       if (!text) continue;
       const fresh = await Lead.findById(lead._id).select('mode status').lean();
-      if (!fresh || fresh.mode !== 'AI' || (!opts.final && !['NEW', 'QUESTIONNAIRE'].includes(fresh.status))) {
+      if (!fresh || fresh.mode !== 'AI' || (!opts.final && !ACTIVE_STATUSES.includes(fresh.status as LeadStatus))) {
         logger.info({ leadId: String(lead._id) }, 'Send skipped: chat is no longer in AI mode');
         break;
       }

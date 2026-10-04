@@ -63,7 +63,8 @@ describe('Telegram Business handlers', () => {
   });
 
   it('message written by TEMUR in the chat → manual takeover, no AI reply afterwards', async () => {
-    const { bot, gateway } = makeBot();
+    const { bot, gateway, settings } = makeBot();
+    await settings.set({ coach_message_stops_ai: true });
     await bot.handleUpdate(bm(102, 102, 1, 'Salom, kurs haqida'));
     await bot.handleUpdate(bm(102, OWNER, 2, 'Salom, men Temur'));
     await bot.handleUpdate(bm(102, 102, 3, '180 90 25'));

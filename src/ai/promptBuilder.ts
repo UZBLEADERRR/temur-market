@@ -18,6 +18,7 @@ Faqat JSON qaytar, boshqa hech narsa yozma:
 - RASMLAR: mijoz rasm yuborsa (qomat, ovqat, skrinshot) — rasm so'rovga ilova qilingan. Qisqa, samimiy va hurmat bilan izoh ber (tana haqida kamsituvchi so'z yo'q, tashxis yo'q, aniq foiz/kilo taxmin qilma), keyin suhbatni davom ettir. Rasmdagi narsani to'qima.
 - SPAM: ko'p rasm, stiker, reklama, havola yoki mavzuga aloqasiz xabarlarga chalg'ima — ularni e'tiborsiz qoldir va anketani davom ettir; faqat stiker/emoji bo'lsa NO_RESPONSE.
 - MASLAHAT: ruxsat berilgan bo'lsa, haqiqiy murabbiydek qisqa umumiy maslahat ber (1–3 gap: mashg'ulot muntazamligi, oqsil, uyqu, suv, yurish, sabr). Shaxsiy ratsion/dastur, kaloriya raqamlari, dori, tibbiy tashxis — yo'q: «shaxsiy dasturni kurs ichida tuzib beraman» de.
+- MURABBIY XABARLARI: tarixda «(O'ZI yozgan)» deb belgilangan xabarlarni murabbiyning o'zi yozgan. Ular ustun: aytgan narxi, chegirmasi, va'dasi va ko'rsatmasiga amal qil, ularga zid gapirma, takrorlama; u savol bergan bo'lsa va mijoz javob bergan bo'lsa — suhbatni shu yerdan tabiiy davom ettir.
 - PAUSE: mijoz "keyinroq yozaman" desa → bitta juda qisqa javob (masalan «Hop»), savol berma.
 - NO_RESPONSE: xabar javob talab qilmaydi (stiker, "ok" va savol allaqachon berilgan) → messages: [].
 - extracted: faqat mijoz shu suhbatda aniq aytgan ma'lumot, aks holda null. Raqamlar raqam bo'lsin (bo'y sm, vazn kg). goal — qisqa matn ("ozish 85 kg gacha"). trainingLocation: "zal" yoki "uy". healthProblems: muammo bo'lmasa "yo'q".
@@ -47,6 +48,8 @@ export interface PromptInput {
   ackWords: string;
   intentPending: boolean;
   coachMode?: boolean;
+  salesMode?: boolean;
+  salesPrompt?: string;
   allowAdvice?: boolean;
   photos?: number;
   lastAiMessages: string[];
@@ -70,7 +73,7 @@ export function buildSystem(input: PromptInput): string {
 
 export function buildUserText(input: PromptInput): string {
   const known = Object.fromEntries(Object.entries(input.answers ?? {}).filter(([, v]) => v !== undefined && v !== null && v !== ''));
-  const who = (s: string) => (s === 'client' ? 'Mijoz' : input.coachName);
+  const who = (s: string) => (s === 'client' ? 'Mijoz' : s === 'temur' ? `${input.coachName} (O'ZI yozgan)` : input.coachName);
   return [
     '== MIJOZ HOLATI (kod hisoblagan) ==',
     `Mijoz tili: ${input.lang === 'ru' ? 'rus' : "o'zbek lotin"}`,
@@ -81,6 +84,9 @@ export function buildUserText(input: PromptInput): string {
     input.missing ? `Joriy savolda yetishmayapti: ${input.missing}` : '',
     `QOLGAN SAVOLLAR (tartib bilan):\n${input.remainingQuestions.map((q) => `${q.step}. «${q.text}»`).join('\n')}`,
     input.intentPending ? "MAQSAD ANIQLANMAGAN: mijoz kurs bo'yicha yozyaptimi? intent ni aniqla (ozish, semirish, ozg'inlik, qomat, maslahat so'rash — bularning hammasi course)." : '',
+    input.salesMode
+      ? `REJIM: SOTUV. Anketa savollarini berma.\n${input.salesPrompt ?? ''}\nActionlar: ASK_NEXT (sotuvni davom ettirish, question=null), SOLD, REFUSED, READY (reason=wants_coach), URGENT_READY, NO_RESPONSE.`
+      : '',
     input.coachMode
       ? "REJIM: anketa tugagan. Sen murabbiy yordamchisisan: mijoz savoliga javob ber, qo'llab-quvvatla, umumiy maslahat ber. Anketa savollarini berma. action=ASK_NEXT (question=null) yoki NO_RESPONSE."
       : '',

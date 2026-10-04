@@ -23,7 +23,7 @@ export class ReminderService {
     const r1 = (await this.settings.num('reminder1_delay_minutes')) * MINUTE;
     const r2 = (await this.settings.num('reminder2_delay_hours')) * HOUR;
     const candidates = await Lead.find({
-      status: 'QUESTIONNAIRE',
+      status: { $in: ['QUESTIONNAIRE', 'SALES'] },
       mode: 'AI',
       remindersSent: { $lt: 2 },
       pendingSince: null,
@@ -47,7 +47,8 @@ export class ReminderService {
       } catch {
         continue;
       }
-      const text = await this.settings.text(`reminder${number}`, (lead.language as Lang) ?? 'uz');
+      const key = lead.status === 'SALES' ? 'sales_reminder' : `reminder${number}`;
+      const text = await this.settings.text(key, (lead.language as Lang) ?? 'uz');
       const delivered = await this.engine.sendToClient(lead, [text], { kind: 'reminder', at: now });
       await Reminder.updateOne({ leadId: lead._id, number }, { $set: { text, sentAt: now } });
       lead.remindersSent = number;

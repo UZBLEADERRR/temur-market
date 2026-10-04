@@ -23,6 +23,7 @@ export interface DailyStats {
   date: Date;
   newLeads: number;
   completed: number;
+  sold: number;
   answered: number;
   paid: number;
   rejected: number;
@@ -35,9 +36,10 @@ export async function getDailyStats(timeZone: string, day = new Date()): Promise
   const from = startOfDayInTz(day, timeZone);
   const to = new Date(from.getTime() + 24 * 3600_000);
   const range = { $gte: from, $lt: to };
-  const [newLeads, completed, answered, paid, rejected, urgent, waiting, bySource] = await Promise.all([
+  const [newLeads, completed, sold, answered, paid, rejected, urgent, waiting, bySource] = await Promise.all([
     Lead.countDocuments({ createdAt: range }),
-    Lead.countDocuments({ readyAt: range }),
+    Lead.countDocuments({ $or: [{ questionnaireDoneAt: range }, { readyAt: range, questionnaireDoneAt: null }] }),
+    Lead.countDocuments({ soldAt: range }),
     Lead.countDocuments({ answeredAt: range }),
     Lead.countDocuments({ paidAt: range }),
     Lead.countDocuments({ rejectedAt: range }),
@@ -53,6 +55,7 @@ export async function getDailyStats(timeZone: string, day = new Date()): Promise
     date: from,
     newLeads,
     completed,
+    sold,
     answered,
     paid,
     rejected,
@@ -69,6 +72,7 @@ export function formatStats(s: DailyStats, timeZone: string): string {
     `📊 <b>Statistika — ${day}</b>\n\n` +
     `Yangi leadlar: ${s.newLeads}\n` +
     `Anketa tugagan: ${s.completed}\n` +
+    `AI sotdi: ${s.sold}\n` +
     `Javob berilgan: ${s.answered}\n` +
     `To'lagan: ${s.paid}\n` +
     `Rad etgan: ${s.rejected}\n` +
@@ -101,6 +105,7 @@ export const EXPORT_COLUMNS = [
   { header: 'Shoshilinch', key: 'urgent', width: 10 },
   { header: 'Sabab', key: 'readyReason', width: 14 },
   { header: 'Tayyor', key: 'readyAt', width: 18 },
+  { header: 'AI sotdi', key: 'soldAt', width: 18 },
   { header: 'Javob berildi', key: 'answeredAt', width: 18 },
   { header: "To'ladi", key: 'paidAt', width: 18 },
   { header: 'Rad etdi', key: 'rejectedAt', width: 18 },
@@ -135,6 +140,7 @@ export async function exportRows(timeZone: string) {
       urgent: l.urgent ? 'ha' : "yo'q",
       readyReason: l.readyReason ?? '',
       readyAt: dt(l.readyAt),
+      soldAt: dt(l.soldAt),
       answeredAt: dt(l.answeredAt),
       paidAt: dt(l.paidAt),
       rejectedAt: dt(l.rejectedAt),
