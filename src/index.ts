@@ -32,7 +32,7 @@ async function main() {
   const bot = createBot(env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_API_ROOT);
   const gateway = new GrammyGateway(bot, env.adminIds, env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_API_ROOT);
   const leads = new LeadService({ gateway, timeZone: env.TZ_NAME, publicUrl: env.publicUrl });
-  const engine = new ConversationEngine({ gateway, ai, settings, leads });
+  const engine = new ConversationEngine({ gateway, ai, settings, leads }, { timeZone: env.TZ_NAME });
   const reminders = new ReminderService(engine, settings);
   const app: AppContext = { env, settings, ai, engine, leads, reminders, gateway };
 
@@ -57,6 +57,8 @@ async function main() {
         { command: 'navbat', description: 'Javob kutayotgan mijozlar' },
         { command: 'stats', description: 'Kunlik statistika' },
         { command: 'export', description: 'Excel eksport' },
+        { command: 'faqat_anketa', description: 'Rejim: faqat 5 savol' },
+        { command: 'sotuv_rejimi', description: 'Rejim: anketa + sotuv' },
         { command: 'settings', description: 'Sozlamalar' },
         { command: 'prompt', description: 'System prompt' },
         { command: 'help', description: 'Yordam' },

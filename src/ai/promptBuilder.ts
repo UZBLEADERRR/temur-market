@@ -51,6 +51,8 @@ export interface PromptInput {
   salesMode?: boolean;
   salesPrompt?: string;
   salesDirective?: string;
+  nowLocal?: string;
+  soldContext?: boolean;
   priceList?: string;
   paymentDetails?: string;
   allowAdvice?: boolean;
@@ -94,12 +96,16 @@ export function buildUserText(input: PromptInput): string {
           `NARXLAR: ${input.priceList || "(alohida kiritilmagan — BILIMLAR BAZASIdagi «Kurs haqida» dan ol)"}`,
           `TO'LOV MA'LUMOTI: ${input.paymentDetails || "(kiritilmagan — mijoz rozi bo'lsa SOLD reason=agreed)"}`,
           `KEYINGI QADAM: ${input.salesDirective ?? ''}`,
+          `HOZIRGI VAQT (mijoz vaqti): ${input.nowLocal ?? ''}`,
+          "follow_up_at: mijoz keyinroq/ertaga qaror qilishini aytsa — qachon yozish kerakligi, \"YYYY-MM-DD HH:mm\" (mijoz vaqti bilan; aniq aytmasa ertaga shu paytga yaqin). follow_up_note: nima haqida (masalan «narxni oilasi bilan maslahatlashadi»). Aks holda null.",
           "sales_step: javobing qaysi bosqichga yetkazdi — 1 = taklif va ANIQ NARX aytildi, 2 = yopish savoli berildi («boshlaymizmi?»), 3 = to'lov ma'lumoti yuborildi.",
           'Actionlar: ASK_NEXT (sotuvni davom ettirish, question=null), SOLD, REFUSED, READY (reason=wants_coach), URGENT_READY, NO_RESPONSE.',
         ].join('\n')
       : '',
     input.coachMode
-      ? "REJIM: anketa tugagan. Sen murabbiy yordamchisisan: mijoz savoliga javob ber, qo'llab-quvvatla, umumiy maslahat ber. Anketa savollarini berma. action=ASK_NEXT (question=null) yoki NO_RESPONSE."
+      ? `REJIM: anketa tugagan. Sen murabbiy yordamchisisan: mijoz savoliga javob ber, qo'llab-quvvatla, umumiy maslahat ber. Anketa savollarini berma. action=ASK_NEXT (question=null) yoki NO_RESPONSE.${
+          input.soldContext ? " Mijoz kursni sotib olgan: guruh linkini va to'lov tasdig'ini murabbiy o'zi beradi — linkni o'zing berma, «tez orada yuboraman» de." : ''
+        }`
       : '',
     `MASLAHAT: ${input.allowAdvice === false ? "ruxsat yo'q — maslahat so'ralsa, savollardan keyin o'zim aytaman de" : 'ruxsat bor (umumiy, qisqa)'}`,
     input.photos ? `Mijoz ${input.photos} ta rasm yubordi (ilova qilingan).` : '',

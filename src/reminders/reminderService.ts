@@ -20,6 +20,11 @@ export class ReminderService {
   ) {}
 
   async tick(now = new Date()): Promise<number> {
+    // planned «o'ylab ko'raman» follow-ups first
+    const due = await Lead.find({ followUpAt: { $ne: null, $lte: now }, mode: 'AI', status: 'SALES' }).select('_id').limit(50).lean();
+    let followUps = 0;
+    for (const l of due) if (await this.engine.followUp(String(l._id))) followUps++;
+
     const r1 = (await this.settings.num('reminder1_delay_minutes')) * MINUTE;
     const r2 = (await this.settings.num('reminder2_delay_hours')) * HOUR;
     const candidates = await Lead.find({
@@ -27,6 +32,7 @@ export class ReminderService {
       mode: 'AI',
       remindersSent: { $lt: 2 },
       pendingSince: null,
+      followUpAt: null,
       lastOutgoingAt: { $ne: null, $lte: new Date(now.getTime() - r1) },
       lastClientMessageAt: { $ne: null, $gte: new Date(now.getTime() - WINDOW_MS) },
     }).limit(100);
@@ -56,6 +62,6 @@ export class ReminderService {
       logger.info({ leadId: String(lead._id), number, delivered }, 'Reminder sent');
       sent += delivered ? 1 : 0;
     }
-    return sent;
+    return sent + followUps;
   }
 }

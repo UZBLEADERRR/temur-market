@@ -112,6 +112,14 @@
   <section id="tab-settings" class="hidden">
     <h2>Sozlamalar</h2>
     <p class="muted">Prompt, savollar, eslatmalar, kalit so'zlar — hammasi shu yerda. O'zgarish darhol kuchga kiradi.</p>
+    <div class="card" id="modeCard">
+      <b>Bot rejimi</b>
+      <div class="row" style="margin-top:8px">
+        <button class="btn secondary" id="modeQuiz">📝 Faqat 5 savol</button>
+        <button class="btn secondary" id="modeSales">💰 Anketa + sotuv</button>
+      </div>
+      <p class="muted" id="modeHint"></p>
+    </div>
     <div id="settingsForm"></div>
   </section>
 
@@ -309,7 +317,23 @@ async function loadSettings() {
   settingsCache = await api('/settings');
   renderSettingsForm($('coachForm'), (d) => d.group === 'Murabbiy');
   renderSettingsForm($('settingsForm'), (d) => d.group !== 'Murabbiy');
+  renderMode();
 }
+function renderMode() {
+  const on = settingsCache.values.sales_mode === true || settingsCache.values.sales_mode === 'true';
+  $('modeQuiz').className = 'btn ' + (on ? 'secondary' : '');
+  $('modeSales').className = 'btn ' + (on ? '' : 'secondary');
+  $('modeHint').textContent = on
+    ? "Anketadan keyin AI kursni to'lovgacha sotadi, «o'ylab ko'raman» desa keyin o'zi eslatadi."
+    : "Anketa tugagach AI to'xtaydi va kartochka sizga keladi.";
+}
+async function setMode(on) {
+  await api('/settings', { method: 'PUT', body: { values: { sales_mode: on } } });
+  toast(on ? 'Anketa + sotuv' : 'Faqat 5 savol');
+  loadSettings();
+}
+$('modeQuiz').onclick = () => setMode(false);
+$('modeSales').onclick = () => setMode(true);
 function renderSettingsForm(root, filter) {
   const { spec, values } = settingsCache;
   let html = ''; let group = '';

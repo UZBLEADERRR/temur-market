@@ -17,7 +17,7 @@ import { isChatClosedError, type TelegramGateway } from '../telegram/gateway';
 import type { LeadAnswers, LeadStatus, QuestionStep, ReadyReason } from '../types/domain';
 import { containsAny, detectLanguage, escapeHtml, fillTemplate, isGreetingOnly, normalize, splitKeywords, type Lang } from '../utils/text';
 import { KeyedMutex } from '../utils/limiter';
-import { sleep } from '../utils/time';
+import { formatLocal, HOUR, parseLocal, sleep, zonedParts } from '../utils/time';
 import { logger } from '../utils/logger';
 
 export interface ClientInfo {
@@ -44,6 +44,8 @@ export interface EngineOptions {
   /** Disables typing delays (tests). */
   fastTyping?: boolean;
   now?: () => Date;
+  /** Client-facing time zone (follow-up times, quiet hours). */
+  timeZone?: string;
 }
 
 const ACTIVE_STATUSES: LeadStatus[] = ['NEW', 'QUESTIONNAIRE', 'SALES'];
@@ -130,6 +132,8 @@ export class ConversationEngine {
     });
     const isFirst = !lead.lastClientMessageAt;
     lead.lastClientMessageAt = now;
+    // the client is back — a planned «o'ylab ko'raman» reminder is no longer needed
+    if (lead.followUpAt) lead.followUpAt = undefined;
     if (active) lead.pendingSince ??= now;
     await lead.save();
     logger.info({ leadId: String(lead._id), kind: msg.kind, active }, 'Incoming client message');
@@ -617,6 +621,8 @@ export class ConversationEngine {
       salesMode,
       salesPrompt: salesMode ? fillTemplate(await s.get('sales_prompt'), { coach_name: await s.get('coach_name') }) : undefined,
       salesDirective,
+      nowLocal: formatLocal(this.now(), this.tz()),
+      soldContext: lead.readyReason === 'sold',
       priceList: salesMode ? await s.get('price_list') : undefined,
       paymentDetails: salesMode ? await s.get('payment_details') : undefined,
       allowAdvice: await s.bool('allow_advice'),
@@ -711,21 +717,74 @@ export class ConversationEngine {
     if (ai.action === 'URGENT_READY' || markerUrgent) return this.finishReady(lead, 'safety', true, await s.text('ready_message', outLang));
     if (ai.action === 'READY' && ai.reason === 'bot_question') return this.finishReady(lead, 'bot_question', false, await s.text('bot_answer', outLang));
     if (ai.action === 'READY') return this.finishReady(lead, 'wants_coach', false, out.length ? out.slice(0, 2) : [await s.text('ready_message', outLang)]);
-    if (ai.action === 'SOLD') return this.finishReady(lead, 'sold', false, out.length ? out.slice(0, 2) : [await s.text('ready_message', outLang)]);
+    if (ai.action === 'SOLD') {
+      // optionally the AI stays as the coach's assistant after the sale (the coach still sends the group link)
+      if (await s.bool('ai_after_sale')) lead.alwaysOn = true;
+      lead.followUpAt = undefined;
+      return this.finishReady(lead, 'sold', false, out.length ? out.slice(0, 2) : [await s.text('ready_message', outLang)]);
+    }
     if (ai.action === 'REFUSED') return this.finishReady(lead, 'refused', false, out.slice(0, 2));
     if (ai.action === 'NO_RESPONSE' || !out.length) {
       await lead.save();
       return;
     }
     // the payment details are sent exactly as the admin wrote them (never retyped by the model)
-    const payment = (await s.get('payment_details')).trim();
+    const payment = (await s.get('payment_details')).trim() || paymentFromInfo(`${await s.get('price_list')}\n${await s.get('course_info')}`);
     const reachedPayment = (ai.sales_step ?? 0) >= 3;
     if (reachedPayment && payment && step < 3 && !containsPayment(out.join('\n'), payment)) out.push(payment);
+    if (ai.follow_up_at) await this.planFollowUp(lead, ai.follow_up_at, ai.follow_up_note ?? '');
     lead.salesStep = Math.max(step, Math.min(3, ai.sales_step ?? step));
     lead.salesTurns = turns + 1;
     await lead.save();
     await this.sendToClient(lead, out.slice(0, 4));
     void this.maybeSummarize(lead).catch(() => undefined);
+  }
+
+  private tz(): string {
+    return this.opts.timeZone ?? 'Asia/Tashkent';
+  }
+
+  /**
+   * «Ertaga o'ylab ko'raman» → remember to write again. Kept inside Telegram's 24h window after the client's
+   * last message and outside night hours (22:00–09:00 client time).
+   */
+  private async planFollowUp(lead: LeadDoc, when: string, note: string): Promise<void> {
+    if ((lead.followUpsSent ?? 0) >= (await this.deps.settings.num('max_follow_ups'))) return;
+    const now = this.now();
+    let at = parseLocal(when, this.tz()) ?? new Date(now.getTime() + 20 * HOUR);
+    const local = zonedParts(at, this.tz());
+    if (local.hour >= 22) at = new Date(at.getTime() + (24 - local.hour + 10) * HOUR - local.minute * 60_000);
+    else if (local.hour < 9) at = new Date(at.getTime() + (10 - local.hour) * HOUR - local.minute * 60_000);
+    const windowEnd = (lead.lastClientMessageAt ?? now).getTime() + 23 * HOUR;
+    if (at.getTime() > windowEnd) at = new Date(windowEnd);
+    if (at.getTime() < now.getTime() + 30 * 60_000) at = new Date(now.getTime() + 30 * 60_000);
+    lead.followUpAt = at;
+    lead.followUpNote = note.slice(0, 300);
+    logger.info({ leadId: String(lead._id), at: at.toISOString() }, 'Follow-up planned');
+  }
+
+  /** Sends the planned follow-up: a short, context-aware nudge written by the model. */
+  followUp(leadId: string): Promise<boolean> {
+    return this.mutex.run(leadId, async () => {
+      const lead = await Lead.findById(leadId);
+      if (!lead || !isAiActive(lead) || !lead.followUpAt || lead.status !== 'SALES') return false;
+      const lang = (lead.language as Lang) ?? 'uz';
+      const directive = `ESLATMA VAQTI: mijoz o'ylab ko'rishini aytgan edi${lead.followUpNote ? ` (${lead.followUpNote})` : ''}. Yangi xabar yo'q — sen o'zing yozyapsan. Salom bilan, samimiy va qisqa eslat, qaror haqida yengil so'ra yoki yordam taklif qil. Bosim yo'q, narxni takrorlama (so'ramasa).`;
+      let ai: AiResponse;
+      try {
+        ai = await this.askAi(lead, plainAnswers(lead), 6, lead.bmi ?? undefined, lang, [], 6, [], false, true, directive);
+      } catch (err) {
+        await this.onAiFailure(lead, err as Error);
+        return false;
+      }
+      lead.followUpAt = undefined;
+      lead.followUpsSent = (lead.followUpsSent ?? 0) + 1;
+      await lead.save();
+      const out = ai.messages.map((m) => stripMarkers(m).text).filter(Boolean).slice(0, 2);
+      const sent = out.length ? await this.sendToClient(lead, out, { kind: 'follow_up' }) : 0;
+      logger.info({ leadId, sent }, 'Follow-up sent');
+      return sent > 0;
+    });
   }
 
   /** Tells the model where the sale is and what the next concrete step must be, so it always moves towards payment. */
@@ -890,10 +949,10 @@ export class ConversationEngine {
     await Lead.updateOne(
       { _id: lead._id },
       {
-        $set: { answers: {}, status: 'NEW', mode: 'AI', urgent: false, remindersSent: 0, aiFailures: 0, askCount: 0, skippedSteps: [], currentQuestion: 1, adminCardMessageIds: [], salesStep: 0, salesTurns: 0 },
+        $set: { answers: {}, status: 'NEW', mode: 'AI', urgent: false, remindersSent: 0, aiFailures: 0, askCount: 0, skippedSteps: [], currentQuestion: 1, adminCardMessageIds: [], salesStep: 0, salesTurns: 0, followUpsSent: 0 },
         $unset: {
           intent: '', bmi: '', targetBmi: '', readyReason: '', summary: '', summaryMessageCount: '', lastAskedStep: '', pendingSince: '',
-          lastClientMessageAt: '', lastOutgoingAt: '', readyAt: '', answeredAt: '', paidAt: '', rejectedAt: '', aiFailureNotifiedAt: '', questionnaireDoneAt: '', soldAt: '',
+          lastClientMessageAt: '', lastOutgoingAt: '', readyAt: '', answeredAt: '', paidAt: '', rejectedAt: '', aiFailureNotifiedAt: '', questionnaireDoneAt: '', soldAt: '', followUpAt: '', followUpNote: '',
         },
       },
     );
@@ -926,6 +985,18 @@ export function plainAnswers(lead: { answers?: unknown }): LeadAnswers {
   const a = lead.answers as { toObject?: () => Record<string, unknown> } | Record<string, unknown> | undefined;
   const obj = (a && typeof (a as { toObject?: unknown }).toObject === 'function' ? (a as { toObject: () => Record<string, unknown> }).toObject() : (a ?? {})) as Record<string, unknown>;
   return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== null && v !== undefined)) as LeadAnswers;
+}
+
+/** Card / payment lines found inside the course info (used when «To'lov ma'lumoti» is empty). */
+export function paymentFromInfo(info: string): string {
+  const lines = info.split(/\r?\n/);
+  const idx = lines.findIndex((l) => /(?:\d[ -]?){16}/.test(l));
+  if (idx < 0) return '';
+  // the card line plus an adjacent owner / instruction line when it looks related
+  const around = [lines[idx - 1], lines[idx], lines[idx + 1]].filter(
+    (l, i) => l !== undefined && (i === 1 || /karta|card|карта|nomi|ism|ega|to'lov|оплат|chek|чек/i.test(l)),
+  );
+  return around.map((l) => l.trim()).filter(Boolean).join('\n');
 }
 
 /** True when the message already contains the payment details (card number or the first line). */

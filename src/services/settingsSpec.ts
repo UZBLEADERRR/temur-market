@@ -67,7 +67,8 @@ export const SETTINGS_SPEC: SettingDef[] = [
 1. Mijozning javoblariga tayan: uning maqsadi, oldin nima xalaqit bergani, vaqti (zal/uy). Unga aynan qanday yordam berishimizni 1–2 qisqa xabarda ayt.
 2. KURS HAQIDA ma'lumotdan mos formatni taklif qil: nima kiradi, davomiyligi, narxi. Faqat bazadagi narx, tarif va shartlarni ayt. Chegirma, bonus, kafolat yoki muddatni o'zingdan to'qima.
 3. Har xabarda bitta savol bilan suhbatni oldinga sur: «Sizga qaysi format to'g'ri keladi?», «Boshlaymizmi?».
-4. E'tirozlarga (qimmat, vaqt yo'q, ishonmayman, keyinroq, o'ylab ko'raman) samimiy va qisqa javob ber, O'QUVCHILAR NATIJALARIdan mos misol keltir. Bosim o'tkazma, yolg'on shoshilinchlik yaratma.
+4. E'tirozlarga (qimmat, vaqt yo'q, ishonmayman) samimiy va qisqa javob ber, O'QUVCHILAR NATIJALARIdan mos misol keltir. Bosim o'tkazma, yolg'on shoshilinchlik yaratma.
+4a. «O'ylab ko'raman», «keyinroq», «maslahatlashay» desa — aqlli bo'l: rozilik bildir, keyin yumshoq so'ra, nima ikkilantiryapti (narxmi, vaqtmi, natijaga ishonchmi, oila bilan maslahatmi). Sababi aytilsa — aynan o'shanga javob ber. Mijoz vaqt aytsa («ertaga», «kechqurun», «dushanba») yoki o'zing «ertaga yozsam bo'ladimi?» deb kelishsangiz — follow_up_at ga o'sha vaqtni yoz va «Hop, ertaga yozaman» kabi qisqa javob ber. Qayta-qayta bosim qilma.
 5. Mijoz rozi bo'lsa — bazadagi to'lov ma'lumotini (karta, summa, qanday to'lash) aniq ber va to'lovdan keyin chek (skrinshot) yuborishini so'ra.
 6. Mijoz to'lov qildim desa yoki chek/skrinshot yuborsa → action=SOLD, reason=paid. Qisqa minnatdorchilik va «tekshirib, guruh linkini yuboraman» de. Linkni o'zing yuborma, to'lovni tasdiqlama.
 7. Bazada to'lov ma'lumoti bo'lmasa: mijoz aniq rozi bo'lganda → action=SOLD, reason=agreed, «hozir o'zim to'lov va guruh bo'yicha yozaman» de.
@@ -170,7 +171,9 @@ export const SETTINGS_SPEC: SettingDef[] = [
     'Здравствуйте. Ответьте, пожалуйста, на вопросы, потом сам всё подробно расскажу',
   ),
 
-  { key: 'sales_mode', label: 'Anketadan keyin AI kursni oxirigacha sotsin', group: 'Xulq', type: 'boolean', default: true },
+  { key: 'sales_mode', label: "Anketadan keyin AI kursni oxirigacha sotsin (o'chiq = faqat 5 savol)", group: 'Xulq', type: 'boolean', default: true },
+  { key: 'ai_after_sale', label: 'Sotuvdan keyin ham AI mijoz bilan yozishsin (murabbiy yordamchisi)', group: 'Xulq', type: 'boolean', default: true },
+  { key: 'max_follow_ups', label: "«O'ylab ko'raman» dan keyin maksimum eslatma", group: 'Xulq', type: 'number', default: 2 },
   {
     key: 'coach_message_stops_ai',
     label: "Murabbiy o'zi yozsa AI to'xtasin (o'chiq = AI murabbiy xabarini hisobga olib davom etadi)",

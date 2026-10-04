@@ -588,7 +588,8 @@ describe('sales stage and coach messages', () => {
   });
 
   it('objection is handled; payment receipt → SOLD: AI stops and the coach is told to send the group link', async () => {
-    const { engine, gateway, llm } = buildApp();
+    const { engine, gateway, llm, settings } = buildApp();
+    await settings.set({ ai_after_sale: false });
     llm.push(completeQuestionnaire, { messages: ['Taklif...', 'Boshlaymizmi?'], action: 'ASK_NEXT' });
     await engine.handleClientMessage(clientMsg(91, 'Kurs: 180 95 25, hammasi'));
     llm.push({ messages: ["Tushunaman. Kuniga 16 ming so'mga to'g'ri keladi, natija esa butun umrga", 'Boshlaymizmi?'], action: 'ASK_NEXT' });
@@ -714,5 +715,106 @@ describe('sales funnel goes all the way to payment', () => {
     llm.push(done, { messages: ['Taklif', 'Boshlaymizmi?'], action: 'ASK_NEXT' });
     await engine.handleClientMessage(clientMsg(97, 'Kurs: 180 95 25, hammasi'));
     expect(gateway.admin.some((a) => a.html.includes('Kurs narxi kiritilmagan'))).toBe(true);
+  });
+});
+
+describe("«o'ylab ko'raman», card from course info, AI after sale", () => {
+  const done = {
+    messages: ['Rahmat!'],
+    action: 'READY',
+    reason: 'completed',
+    answered_current: true,
+    extracted: { trainingExperience: '1 yil', goal: 'ozish', targetWeight: 80, trainingDays: 4, trainingLocation: 'zal', previousAttempts: 'vaqt', healthProblems: "yo'q" },
+  };
+
+  it("«ertaga o'ylab ko'raman» → follow-up planned inside the 24h window, sent by the reminder tick, cleared if the client writes", async () => {
+    const t0 = new Date('2026-10-04T15:00:00Z'); // 20:00 in Tashkent
+    let now = t0;
+    const { engine, gateway, llm, reminders } = buildApp({ now: () => now });
+    llm.push(done, { messages: ['Taklif 800 000', 'Boshlaymizmi?'], action: 'ASK_NEXT', sales_step: 2 });
+    await engine.handleClientMessage(clientMsg(98, 'Kurs: 180 95 25, hammasi', { date: t0 }));
+    llm.push((req) => {
+      expect(req.parts.at(-1)!.text).toContain('HOZIRGI VAQT (mijoz vaqti): 2026-10-04 20:00');
+      return {
+        messages: ["Albatta, shoshilmang. Nima ikkilantiryapti — narxmi?", 'Hop, ertaga yozaman'],
+        action: 'ASK_NEXT',
+        follow_up_at: '2026-10-05 19:00',
+        follow_up_note: 'oilasi bilan maslahatlashadi',
+      };
+    });
+    await engine.handleClientMessage(clientMsg(98, "Ertaga o'ylab ko'raman, oilam bilan maslahatlashay", { date: t0 }));
+    let lead = await Lead.findOne({ chatId: 98 });
+    expect(lead?.followUpAt?.toISOString()).toBe('2026-10-05T14:00:00.000Z'); // 19:00 Tashkent, < 24h window
+    expect(lead?.followUpNote).toContain('oilasi');
+
+    // the normal reminders do not fire while a follow-up is planned
+    now = new Date(t0.getTime() + 2 * 3600_000);
+    const before = gateway.sent.length;
+    expect(await reminders.tick(now)).toBe(0);
+    expect(gateway.sent.length).toBe(before);
+
+    now = new Date('2026-10-05T14:01:00Z');
+    llm.push((req) => {
+      expect(req.parts.at(-1)!.text).toContain('ESLATMA VAQTI');
+      expect(req.parts.at(-1)!.text).toContain('oilasi bilan maslahatlashadi');
+      return { messages: ["Assalomu alaykum! Oilangiz bilan gaplashdingizmi?"], action: 'ASK_NEXT' };
+    });
+    expect(await reminders.tick(now)).toBe(1);
+    expect(gateway.textsTo(98).at(-1)).toBe('Assalomu alaykum! Oilangiz bilan gaplashdingizmi?');
+    lead = await Lead.findOne({ chatId: 98 });
+    expect(lead?.followUpAt).toBeFalsy();
+    expect(lead?.followUpsSent).toBe(1);
+  });
+
+  it('a follow-up asked for the night or beyond 24h is moved to daytime / inside the window', async () => {
+    const t0 = new Date('2026-10-04T15:00:00Z'); // 20:00 Tashkent
+    const { engine, llm } = buildApp({ now: () => t0 });
+    llm.push(done, { messages: ['Taklif', 'Boshlaymizmi?'], action: 'ASK_NEXT', sales_step: 2 });
+    await engine.handleClientMessage(clientMsg(99, 'Kurs: 180 95 25, hammasi', { date: t0 }));
+    llm.push({ messages: ['Hop'], action: 'ASK_NEXT', follow_up_at: '2026-10-07 12:00' });
+    await engine.handleClientMessage(clientMsg(99, "Dushanba javob beraman", { date: t0 }));
+    const lead = await Lead.findOne({ chatId: 99 });
+    expect(lead!.followUpAt!.getTime()).toBeLessThanOrEqual(t0.getTime() + 23 * 3600_000);
+  });
+
+  it('the card number written inside «Kurs haqida» is sent exactly at the payment step', async () => {
+    const { engine, gateway, llm, settings } = buildApp();
+    await settings.set({ course_info: "50 kunlik kurs — 800 000 so'm.\nTo'lov kartasi: 8600 1111 2222 3333\nKarta egasi: Temur F.\nBoshqa ma'lumot" });
+    llm.push(done, { messages: ['Taklif 800 000', 'Boshlaymizmi?'], action: 'ASK_NEXT', sales_step: 2 });
+    await engine.handleClientMessage(clientMsg(100, 'Kurs: 180 95 25, hammasi'));
+    llm.push({ messages: ["Zo'r, to'lov ma'lumoti:"], action: 'ASK_NEXT', sales_step: 3 });
+    await engine.handleClientMessage(clientMsg(100, 'Boshlaymiz'));
+    expect(gateway.textsTo(100).at(-1)).toBe("To'lov kartasi: 8600 1111 2222 3333\nKarta egasi: Temur F.");
+  });
+
+  it('after the sale the AI keeps chatting as the coach assistant (and never hands out the group link itself)', async () => {
+    const { engine, gateway, llm } = buildApp();
+    llm.push(done, { messages: ['Taklif', 'Boshlaymizmi?'], action: 'ASK_NEXT', sales_step: 2 });
+    await engine.handleClientMessage(clientMsg(101, 'Kurs: 180 95 25, hammasi'));
+    llm.push({ messages: ['Rahmat! Guruh linkini yuboraman'], action: 'SOLD', reason: 'paid' });
+    await engine.handleClientMessage(clientMsg(101, "To'ladim"));
+    let lead = await Lead.findOne({ chatId: 101 });
+    expect(lead?.readyReason).toBe('sold');
+    expect(lead?.mode).toBe('AI');
+    expect(lead?.alwaysOn).toBe(true);
+    llm.push((req) => {
+      expect(req.parts.at(-1)!.text).toContain('Mijoz kursni sotib olgan');
+      return { messages: ["Ertalab suv iching, nonushtani o'tkazib yubormang"], action: 'ASK_NEXT' };
+    });
+    await engine.handleClientMessage(clientMsg(101, 'Ertalab nima qilay?'));
+    expect(gateway.textsTo(101).at(-1)).toContain('suv iching');
+    lead = await Lead.findOne({ chatId: 101 });
+    expect(lead?.mode).toBe('AI');
+  });
+
+  it('«faqat 5 savol» mode: after the questionnaire the AI stops (no selling)', async () => {
+    const { engine, gateway, llm, settings } = buildApp();
+    await settings.set({ sales_mode: false });
+    llm.push(done);
+    await engine.handleClientMessage(clientMsg(102, 'Kurs: 180 95 25, hammasi'));
+    const lead = await Lead.findOne({ chatId: 102 });
+    expect(lead?.status).toBe('READY');
+    expect(lead?.mode).toBe('MANUAL');
+    expect(gateway.admin.at(-1)?.html).toContain('YANGI LEAD');
   });
 });

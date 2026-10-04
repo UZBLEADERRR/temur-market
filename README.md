@@ -68,6 +68,17 @@ Bu oqim `sales_mode` sozlamasi yoqilganda ishlaydi (standart holatda yoqilgan).
 
 Sotuv bosqichidagi eslatma: "Qaror qildingizmi? Savollaringiz bo'lsa bemalol yozing".
 
+### «O'ylab ko'raman», karta va sotuvdan keyin
+
+- **«O'ylab ko'raman», «keyinroq», «maslahatlashay» desa:** AI bosim qilmaydi. Nima ikkilantirayotganini yumshoq so'raydi (narx, vaqt, ishonch, oila) va aynan shunga javob beradi.
+- **Mijoz vaqt aytsa** («ertaga», «kechqurun»): AI «Hop, ertaga yozaman» deydi va o'sha vaqtda o'zi eslatma yozadi. Eslatmada mijoz nima deganini hisobga oladi.
+  - Telegram qoidasi bo'yicha eslatma mijozning oxirgi xabaridan keyingi 24 soat ichida yuboriladi. Kechasi (22:00–09:00) yuborilmaydi.
+  - Bitta mijozga ko'pi bilan 2 ta eslatma yuboriladi (`max_follow_ups`).
+  - Mijoz o'zi yozsa, rejalashtirilgan eslatma bekor qilinadi.
+- **Karta:** "To'lov ma'lumoti" maydoni bo'sh bo'lsa, AI "Kurs haqida" ichidagi karta raqami yozilgan qatorni (va yonidagi karta egasi qatorini) aynan o'zgartirmasdan yuboradi.
+- **Sotuvdan keyin** (`ai_after_sale`, standart holatda yoqilgan): AI murabbiy yordamchisi sifatida yozishishni davom ettiradi. Guruh linkini va to'lov tasdig'ini baribir Temur o'zi beradi.
+- **Rejimni almashtirish:** mini ilova → Sozlamalar → "Bot rejimi" → **📝 Faqat 5 savol** / **💰 Anketa + sotuv**. Botda: `/faqat_anketa`, `/sotuv_rejimi`.
+
 ### Temur o'zi yozsa
 
 Standart holatda AI **to'xtamaydi**:

@@ -28,6 +28,7 @@ const HELP = `<b>TEMUR.FIT AI-yordamchi — admin</b>
 /get &lt;kalit&gt; · /set &lt;kalit&gt; [qiymat] · /reset_setting &lt;kalit&gt;
 /prompt — system promptni ko'rish va yangilash
 /ai_global_off · /ai_global_on — AI ni butunlay o'chirish/yoqish
+/faqat_anketa · /sotuv_rejimi — faqat 5 savol yoki anketa + sotuv
 
 <b>Uslub</b>
 Chat eksportini (.html / .json / .txt) shu yerga yuboring → anonim namunalar
@@ -147,6 +148,15 @@ export function registerAdminHandlers(bot: Bot, app: AppContext): void {
     if (!lead) return reply(ctx, "Topilmadi. /reset 123456789 yoki /reset @username (sozlama uchun: /reset_setting kalit)");
     await app.engine.resetLead(String(lead._id));
     await reply(ctx, `🧹 Tozalandi: ${lead.telegramId}. Keyingi xabarida bot noldan boshlaydi.`);
+  });
+  // quick switch between «only the 5 questions» and «questions + selling»
+  admin.command('faqat_anketa', async (ctx) => {
+    await app.settings.set({ sales_mode: false });
+    await reply(ctx, "📝 Rejim: <b>faqat 5 savol</b>. Anketa tugagach AI to'xtaydi, kartochka sizga keladi.\n/sotuv_rejimi — sotuvni qayta yoqish");
+  });
+  admin.command('sotuv_rejimi', async (ctx) => {
+    await app.settings.set({ sales_mode: true });
+    await reply(ctx, "💰 Rejim: <b>anketa + sotuv</b>. AI kursni to'lovgacha olib boradi.\n/faqat_anketa — faqat 5 savolga qaytish");
   });
   admin.command('ai_global_off', async (ctx) => {
     await app.settings.set({ ai_enabled: false });

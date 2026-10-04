@@ -50,6 +50,8 @@ export const AiResponseSchema = z.preprocess(
     question: z.coerce.number().int().min(1).max(5).nullish().catch(null),
     intent: z.enum(['course', 'other', 'unclear']).nullish().catch(null),
     sales_step: z.coerce.number().int().min(0).max(3).nullish().catch(null),
+    follow_up_at: z.string().max(40).nullish().catch(null),
+    follow_up_note: z.string().max(300).nullish().catch(null),
     extracted: ExtractedSchema.nullish(),
   }),
 );

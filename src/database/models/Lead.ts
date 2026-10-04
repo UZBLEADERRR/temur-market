@@ -73,6 +73,10 @@ const LeadSchema = new Schema(
     /** Sales funnel: 0 start, 1 offer+price given, 2 closing asked, 3 payment details sent. */
     salesStep: { type: Number, default: 0 },
     salesTurns: { type: Number, default: 0 },
+    /** «O'ylab ko'raman» → when to write again and why. */
+    followUpAt: Date,
+    followUpNote: String,
+    followUpsSent: { type: Number, default: 0 },
     answeredAt: Date,
     paidAt: Date,
     rejectedAt: Date,
