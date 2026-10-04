@@ -1,4 +1,4 @@
-export const LEAD_STATUSES = ['NEW', 'QUESTIONNAIRE', 'SALES', 'READY', 'ANSWERED', 'PAID', 'REJECTED'] as const;
+export const LEAD_STATUSES = ['NEW', 'QUESTIONNAIRE', 'READY', 'ANSWERED', 'PAID', 'REJECTED'] as const;
 export type LeadStatus = (typeof LEAD_STATUSES)[number];
 
 export const LEAD_MODES = ['AI', 'MANUAL'] as const;
@@ -14,9 +14,7 @@ export type ReadyReason =
   | 'paused'
   | 'not_lead'
   | 'flood'
-  | 'send_blocked'
-  | 'sold'
-  | 'refused';
+  | 'send_blocked';
 
 export interface LeadAnswers {
   height?: number;

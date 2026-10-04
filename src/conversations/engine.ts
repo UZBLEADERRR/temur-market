@@ -15,9 +15,9 @@ import type { SettingsService } from '../services/settings';
 import { retrieveExamples } from '../style/examples';
 import { isChatClosedError, type TelegramGateway } from '../telegram/gateway';
 import type { LeadAnswers, LeadStatus, QuestionStep, ReadyReason } from '../types/domain';
-import { containsAny, detectLanguage, escapeHtml, fillTemplate, isGreetingOnly, normalize, splitKeywords, type Lang } from '../utils/text';
+import { containsAny, detectLanguage, escapeHtml, isGreetingOnly, normalize, splitKeywords, type Lang } from '../utils/text';
 import { KeyedMutex } from '../utils/limiter';
-import { formatLocal, HOUR, parseLocal, sleep, zonedParts } from '../utils/time';
+import { sleep } from '../utils/time';
 import { logger } from '../utils/logger';
 
 export interface ClientInfo {
@@ -44,11 +44,9 @@ export interface EngineOptions {
   /** Disables typing delays (tests). */
   fastTyping?: boolean;
   now?: () => Date;
-  /** Client-facing time zone (follow-up times, quiet hours). */
-  timeZone?: string;
 }
 
-const ACTIVE_STATUSES: LeadStatus[] = ['NEW', 'QUESTIONNAIRE', 'SALES'];
+const ACTIVE_STATUSES: LeadStatus[] = ['NEW', 'QUESTIONNAIRE'];
 
 export function isAiActive(lead: { mode?: string | null; status?: string | null; alwaysOn?: boolean | null }): boolean {
   return lead.mode === 'AI' && (ACTIVE_STATUSES.includes(lead.status as LeadStatus) || Boolean(lead.alwaysOn));
@@ -132,8 +130,6 @@ export class ConversationEngine {
     });
     const isFirst = !lead.lastClientMessageAt;
     lead.lastClientMessageAt = now;
-    // the client is back — a planned «o'ylab ko'raman» reminder is no longer needed
-    if (lead.followUpAt) lead.followUpAt = undefined;
     if (active) lead.pendingSince ??= now;
     await lead.save();
     logger.info({ leadId: String(lead._id), kind: msg.kind, active }, 'Incoming client message');
@@ -174,21 +170,10 @@ export class ConversationEngine {
 
   /** Marks a chat as handled by the coach (manual message from Telegram or from the mini app). */
   async takeover(lead: LeadDoc, why: string): Promise<void> {
-    const stops = !lead.alwaysOn && (await this.deps.settings.bool('coach_message_stops_ai'));
-    if (!stops) {
-      // the coach answered himself: what the client wrote so far is covered by his message;
-      // the AI keeps going and takes the coach's words into account on the next client message
-      this.cancel(String(lead._id));
-      await Message.updateMany({ leadId: lead._id, processed: false }, { $set: { processed: true } });
-      lead.pendingSince = undefined;
+    if (lead.alwaysOn) {
+      // AI stays on by admin decision; the coach's message just becomes part of the history
       lead.lastOutgoingAt = this.now();
-      if (lead.status === 'READY') {
-        lead.status = 'ANSWERED';
-        lead.answeredAt ??= this.now();
-      }
       await lead.save();
-      await AdminEvent.create({ type: 'coach_message', leadId: lead._id, data: { why } });
-      await this.deps.leads.refreshCards(lead);
       return;
     }
     this.cancel(String(lead._id));
@@ -337,10 +322,6 @@ export class ConversationEngine {
     if (containsAny(newText, coachKeywords)) {
       await markProcessed();
       return this.finishReady(lead, 'wants_coach', false, await this.deps.settings.text('ready_message', lang));
-    }
-
-    if (lead.status === 'SALES') {
-      return this.salesTurn(lead, pending.map((m) => m.text), photoIds, lang, markProcessed);
     }
 
     // 2) Deterministic extraction (numbers) before the LLM sees the message
@@ -495,23 +476,6 @@ export class ConversationEngine {
 
     const after = nextStep(answers, [...skipped]);
     lead.currentQuestion = after;
-    if (after === 6 && (await this.deps.settings.bool('sales_mode'))) {
-      // questionnaire done → the coach gets the card, the AI moves on to selling the course
-      lead.status = 'SALES';
-      lead.readyReason = 'completed';
-      lead.questionnaireDoneAt = this.now();
-      await lead.save();
-      await AdminEvent.create({ type: 'questionnaire_done', leadId: lead._id });
-      logger.info({ leadId: String(lead._id) }, 'Questionnaire complete — sales stage');
-      await this.deps.leads.sendCard(lead);
-      const priceKnown = /\d/.test((await this.deps.settings.get('price_list')) + (await this.deps.settings.get('course_info')));
-      if (!priceKnown) {
-        await this.deps.gateway
-          .notifyAdmins("⚠️ Kurs narxi kiritilmagan — AI narxni ayta olmaydi. Mini ilova → «Murabbiy haqida» → «Narxlar va tariflar» va «To'lov ma'lumoti» ni to'ldiring.")
-          .catch(() => undefined);
-      }
-      return this.salesTurn(lead, pending.map((m) => m.text), photoIds, outLang, async () => undefined);
-    }
     if (after === 6) {
       const closing =
         (await this.deps.settings.bool('ai_closing_message')) && messages.length && !messages.some((m) => m.includes('?'))
@@ -578,8 +542,6 @@ export class ConversationEngine {
     askedStep: QuestionStep,
     photoIds: string[] = [],
     coachMode = false,
-    salesMode = false,
-    salesDirective = '',
   ): Promise<AiResponse> {
     const s = this.deps.settings;
     const historyLimit = await s.num('history_messages');
@@ -596,7 +558,7 @@ export class ConversationEngine {
       remaining.push({ step: i, text: firstContact ? await s.text('first_message', lang) : await questionText(i as QuestionStep, lang, bmi, s) });
     }
     const queryForExamples = `${newMessages.join(' ')} ${remaining[0]?.text ?? ''}`;
-    const examples = await retrieveExamples(queryForExamples, lang, await s.num('examples_per_request'), lead.telegramId % 1000, { sales: salesMode });
+    const examples = await retrieveExamples(queryForExamples, lang, await s.num('examples_per_request'), lead.telegramId % 1000);
     const input = {
       systemPrompt: await s.get('system_prompt'),
       coachName: await s.get('coach_name'),
@@ -618,14 +580,6 @@ export class ConversationEngine {
       ackWords: await s.text('ack_words', lang),
       intentPending: lead.intent === 'asked',
       coachMode,
-      salesMode,
-      salesPrompt: salesMode ? fillTemplate(await s.get('sales_prompt'), { coach_name: await s.get('coach_name') }) : undefined,
-      salesDirective,
-      nowLocal: formatLocal(this.now(), this.tz()),
-      clientName: lead.firstName ?? undefined,
-      soldContext: lead.readyReason === 'sold',
-      priceList: salesMode ? await s.get('price_list') : undefined,
-      paymentDetails: salesMode ? await s.get('payment_details') : undefined,
       allowAdvice: await s.bool('allow_advice'),
       photos: photoIds.length,
       lastAiMessages: (await this.recentAiTexts(lead, 3)).reverse(),
@@ -658,7 +612,6 @@ export class ConversationEngine {
     lead.readyReason = reason;
     lead.urgent = urgent || lead.urgent;
     lead.readyAt = this.now();
-    if (reason === 'sold') lead.soldAt = this.now();
     lead.pendingSince = undefined;
     await lead.save();
     // the final message is the only one allowed after the decision; mode flips right after it
@@ -686,121 +639,6 @@ export class ConversationEngine {
         `💬 Kurs bo'yicha emas (AI to'xtadi): <a href="tg://user?id=${lead.telegramId}">${escapeHtml(displayName(lead))}</a>${lead.username ? ' @' + escapeHtml(lead.username) : ''}\n<i>${escapeHtml(text.slice(0, 300))}</i>`,
       )
       .catch(() => undefined);
-  }
-
-  /** Sales stage: the AI presents the course, handles objections and closes; then the coach sends the group link. */
-  private async salesTurn(lead: LeadDoc, newMessages: string[], photoIds: string[], lang: Lang, markProcessed: () => Promise<void>): Promise<void> {
-    const s = this.deps.settings;
-    const step = lead.salesStep ?? 0;
-    const turns = lead.salesTurns ?? 0;
-    const directive = await this.salesDirective(step, turns);
-    let ai: AiResponse;
-    try {
-      ai = await this.askAi(lead, plainAnswers(lead), 6, lead.bmi ?? undefined, lang, newMessages, 6, photoIds, false, true, directive);
-    } catch (err) {
-      await this.onAiFailure(lead, err as Error);
-      return;
-    }
-    lead.aiFailures = 0;
-    await markProcessed();
-    if (ai.language) lead.language = ai.language;
-    const outLang = (lead.language as Lang) ?? lang;
-    const recent = new Set((await this.recentAiTexts(lead, 4)).map(normalize));
-    let markerUrgent = false;
-    const out = ai.messages
-      .map((m) => {
-        const x = stripMarkers(m);
-        markerUrgent ||= x.urgent;
-        return x.text;
-      })
-      .filter((m) => m && !recent.has(normalize(m)));
-
-    if (ai.action === 'URGENT_READY' || markerUrgent) return this.finishReady(lead, 'safety', true, await s.text('ready_message', outLang));
-    if (ai.action === 'READY' && ai.reason === 'bot_question') return this.finishReady(lead, 'bot_question', false, await s.text('bot_answer', outLang));
-    if (ai.action === 'READY') return this.finishReady(lead, 'wants_coach', false, out.length ? out.slice(0, 2) : [await s.text('ready_message', outLang)]);
-    if (ai.action === 'SOLD') {
-      // optionally the AI stays as the coach's assistant after the sale (the coach still sends the group link)
-      if (await s.bool('ai_after_sale')) lead.alwaysOn = true;
-      lead.followUpAt = undefined;
-      return this.finishReady(lead, 'sold', false, out.length ? out.slice(0, 2) : [await s.text('ready_message', outLang)]);
-    }
-    if (ai.action === 'REFUSED') return this.finishReady(lead, 'refused', false, out.slice(0, 2));
-    if (ai.action === 'NO_RESPONSE' || !out.length) {
-      await lead.save();
-      return;
-    }
-    // the payment details are sent exactly as the admin wrote them (never retyped by the model)
-    const payment = (await s.get('payment_details')).trim() || paymentFromInfo(`${await s.get('price_list')}\n${await s.get('course_info')}`);
-    const reachedPayment = (ai.sales_step ?? 0) >= 3;
-    if (reachedPayment && payment && step < 3 && !containsPayment(out.join('\n'), payment)) out.push(payment);
-    if (ai.follow_up_at) await this.planFollowUp(lead, ai.follow_up_at, ai.follow_up_note ?? '');
-    lead.salesStep = Math.max(step, Math.min(3, ai.sales_step ?? step));
-    lead.salesTurns = turns + 1;
-    await lead.save();
-    await this.sendToClient(lead, out.slice(0, 4));
-    void this.maybeSummarize(lead).catch(() => undefined);
-  }
-
-  private tz(): string {
-    return this.opts.timeZone ?? 'Asia/Tashkent';
-  }
-
-  /**
-   * «Ertaga o'ylab ko'raman» → remember to write again. Kept inside Telegram's 24h window after the client's
-   * last message and outside night hours (22:00–09:00 client time).
-   */
-  private async planFollowUp(lead: LeadDoc, when: string, note: string): Promise<void> {
-    if ((lead.followUpsSent ?? 0) >= (await this.deps.settings.num('max_follow_ups'))) return;
-    const now = this.now();
-    let at = parseLocal(when, this.tz()) ?? new Date(now.getTime() + 20 * HOUR);
-    const local = zonedParts(at, this.tz());
-    if (local.hour >= 22) at = new Date(at.getTime() + (24 - local.hour + 10) * HOUR - local.minute * 60_000);
-    else if (local.hour < 9) at = new Date(at.getTime() + (10 - local.hour) * HOUR - local.minute * 60_000);
-    const windowEnd = (lead.lastClientMessageAt ?? now).getTime() + 23 * HOUR;
-    if (at.getTime() > windowEnd) at = new Date(windowEnd);
-    if (at.getTime() < now.getTime() + 30 * 60_000) at = new Date(now.getTime() + 30 * 60_000);
-    lead.followUpAt = at;
-    lead.followUpNote = note.slice(0, 300);
-    logger.info({ leadId: String(lead._id), at: at.toISOString() }, 'Follow-up planned');
-  }
-
-  /** Sends the planned follow-up: a short, context-aware nudge written by the model. */
-  followUp(leadId: string): Promise<boolean> {
-    return this.mutex.run(leadId, async () => {
-      const lead = await Lead.findById(leadId);
-      if (!lead || !isAiActive(lead) || !lead.followUpAt || lead.status !== 'SALES') return false;
-      const lang = (lead.language as Lang) ?? 'uz';
-      const directive = `ESLATMA VAQTI: mijoz o'ylab ko'rishini aytgan edi${lead.followUpNote ? ` (${lead.followUpNote})` : ''}. Yangi xabar yo'q — sen o'zing yozyapsan. Salom bilan, samimiy va qisqa eslat, qaror haqida yengil so'ra yoki yordam taklif qil. Bosim yo'q, narxni takrorlama (so'ramasa).`;
-      let ai: AiResponse;
-      try {
-        ai = await this.askAi(lead, plainAnswers(lead), 6, lead.bmi ?? undefined, lang, [], 6, [], false, true, directive);
-      } catch (err) {
-        await this.onAiFailure(lead, err as Error);
-        return false;
-      }
-      lead.followUpAt = undefined;
-      lead.followUpsSent = (lead.followUpsSent ?? 0) + 1;
-      await lead.save();
-      const out = ai.messages.map((m) => stripMarkers(m).text).filter(Boolean).slice(0, 2);
-      const sent = out.length ? await this.sendToClient(lead, out, { kind: 'follow_up' }) : 0;
-      logger.info({ leadId, sent }, 'Follow-up sent');
-      return sent > 0;
-    });
-  }
-
-  /** Tells the model where the sale is and what the next concrete step must be, so it always moves towards payment. */
-  private async salesDirective(step: number, turns: number): Promise<string> {
-    const max = await this.deps.settings.num('max_sales_turns');
-    if (step >= 3) {
-      return "To'lov ma'lumoti allaqachon berilgan. Mijoz «to'ladim» desa yoki chek/skrinshot yuborsa → action=SOLD, reason=paid. Savoli bo'lsa qisqa javob ber va chekni yuborishini eslat. To'lov ma'lumotini mijoz so'ramasa qayta yuborma.";
-    }
-    if (turns >= max) {
-      return "Suhbat cho'zildi. Endi to'g'ridan-to'g'ri yopish: mijoz rozi bo'lsa yoki ikkilanmasa — to'lov ma'lumotini ber (sales_step=3) va chek so'ra; aks holda bitta aniq savol: «To'lov ma'lumotini yuboraymi?»";
-    }
-    if (step === 0) {
-      return "Anketadan sotuvga tabiiy o'tish: avval mijozning o'z so'zlari bilan uning holatini qisqa qaytar (maqsadi, oldin nima xalaqit bergani) — u tushunilganini his qilsin. Keyin unga qanday yordam berishingni 1–2 gapda ayt va mos formatni narxi bilan oddiy gapda ayt (ro'yxat emas). Oxirida bitta yengil savol: «Sizga shu format to'g'ri keladimi?» yoki «Boshlaymizmi?». 2–3 ta qisqa xabar, reklama ohangi yo'q.";
-    }
-    return "Mijoz rozi bo'lsa yoki qanday to'lashni so'rasa — DARHOL to'lov ma'lumotini ber (sales_step=3) va chek yuborishini so'ra. E'tiroz bo'lsa — 1–2 gap bilan javob (natijadan misol), keyin yana yopish savoli. Har javob aniq harakatga chaqiruv bilan tugasin, umumiy gap bilan cho'zma.";
   }
 
   /** After the questionnaire, for "always on" clients: free conversation as the coach's assistant. */
@@ -852,7 +690,7 @@ export class ConversationEngine {
       const text = stripMarkers(raw).text;
       if (!text) continue;
       const fresh = await Lead.findById(lead._id).select('mode status').lean();
-      if (!fresh || fresh.mode !== 'AI' || (!opts.final && !ACTIVE_STATUSES.includes(fresh.status as LeadStatus))) {
+      if (!fresh || fresh.mode !== 'AI' || (!opts.final && !['NEW', 'QUESTIONNAIRE'].includes(fresh.status))) {
         logger.info({ leadId: String(lead._id) }, 'Send skipped: chat is no longer in AI mode');
         break;
       }
@@ -905,13 +743,9 @@ export class ConversationEngine {
   }
 
   private async typing(lead: LeadDoc, text: string): Promise<void> {
-    if (!this.opts.fastTyping) {
-      // a person reads the message first, then starts typing
-      await sleep(700 + Math.random() * 1500);
-    }
     await this.deps.gateway.sendTyping(lead.businessConnectionId, lead.chatId).catch(() => undefined);
     if (this.opts.fastTyping) return;
-    const perChar = (await this.deps.settings.num('typing_ms_per_char')) * (0.75 + Math.random() * 0.5);
+    const perChar = await this.deps.settings.num('typing_ms_per_char');
     const max = await this.deps.settings.num('typing_max_ms');
     const ms = Math.min(max, 800 + text.length * perChar);
     // Telegram shows "typing" for ~5s; refresh for long delays
@@ -954,10 +788,10 @@ export class ConversationEngine {
     await Lead.updateOne(
       { _id: lead._id },
       {
-        $set: { answers: {}, status: 'NEW', mode: 'AI', urgent: false, remindersSent: 0, aiFailures: 0, askCount: 0, skippedSteps: [], currentQuestion: 1, adminCardMessageIds: [], salesStep: 0, salesTurns: 0, followUpsSent: 0 },
+        $set: { answers: {}, status: 'NEW', mode: 'AI', urgent: false, remindersSent: 0, aiFailures: 0, askCount: 0, skippedSteps: [], currentQuestion: 1, adminCardMessageIds: [] },
         $unset: {
           intent: '', bmi: '', targetBmi: '', readyReason: '', summary: '', summaryMessageCount: '', lastAskedStep: '', pendingSince: '',
-          lastClientMessageAt: '', lastOutgoingAt: '', readyAt: '', answeredAt: '', paidAt: '', rejectedAt: '', aiFailureNotifiedAt: '', questionnaireDoneAt: '', soldAt: '', followUpAt: '', followUpNote: '',
+          lastClientMessageAt: '', lastOutgoingAt: '', readyAt: '', answeredAt: '', paidAt: '', rejectedAt: '', aiFailureNotifiedAt: '',
         },
       },
     );
@@ -990,25 +824,6 @@ export function plainAnswers(lead: { answers?: unknown }): LeadAnswers {
   const a = lead.answers as { toObject?: () => Record<string, unknown> } | Record<string, unknown> | undefined;
   const obj = (a && typeof (a as { toObject?: unknown }).toObject === 'function' ? (a as { toObject: () => Record<string, unknown> }).toObject() : (a ?? {})) as Record<string, unknown>;
   return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== null && v !== undefined)) as LeadAnswers;
-}
-
-/** Card / payment lines found inside the course info (used when «To'lov ma'lumoti» is empty). */
-export function paymentFromInfo(info: string): string {
-  const lines = info.split(/\r?\n/);
-  const idx = lines.findIndex((l) => /(?:\d[ -]?){16}/.test(l));
-  if (idx < 0) return '';
-  // the card line plus an adjacent owner / instruction line when it looks related
-  const around = [lines[idx - 1], lines[idx], lines[idx + 1]].filter(
-    (l, i) => l !== undefined && (i === 1 || /karta|card|карта|nomi|ism|ega|to'lov|оплат|chek|чек/i.test(l)),
-  );
-  return around.map((l) => l.trim()).filter(Boolean).join('\n');
-}
-
-/** True when the message already contains the payment details (card number or the first line). */
-function containsPayment(text: string, payment: string): boolean {
-  const digits = payment.replace(/\s+/g, '').match(/\d{8,}/)?.[0];
-  if (digits) return text.replace(/\s+/g, '').includes(digits);
-  return normalize(text).includes(normalize(payment.split('\n')[0]).slice(0, 40));
 }
 
 const isBareAck = (m: string) => /^(tushunarli|tushundim|aha|zo'r|yaxshi|hop|ok|понятно|ясно|хорошо|ага)[.!]?$/i.test(m.trim());

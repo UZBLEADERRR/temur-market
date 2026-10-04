@@ -5,7 +5,6 @@ import { formatDateTime } from '../utils/time';
 const STATUS_LABEL: Record<string, string> = {
   NEW: 'Yangi',
   QUESTIONNAIRE: 'Anketa',
-  SALES: 'Sotuvda (AI sotyapti)',
   READY: 'Tayyor (javob kutmoqda)',
   ANSWERED: 'Javob berildi',
   PAID: "To'ladi",
@@ -22,8 +21,6 @@ const REASON_LABEL: Record<string, string> = {
   not_lead: "Kurs bo'yicha emas",
   flood: "Juda ko'p xabar (spam)",
   send_blocked: 'Telegram yuborishga ruxsat bermadi (pauza?)',
-  sold: "💰 Sotildi — guruh linkini yuboring",
-  refused: 'Kursdan voz kechdi',
 };
 
 export const statusLabel = (s: string) => STATUS_LABEL[s] ?? s;
@@ -37,15 +34,7 @@ export function displayName(lead: Pick<LeadData, 'name' | 'firstName' | 'lastNam
 /** HTML lead card sent to the admin chat (Telegram parse_mode HTML). */
 export function formatLeadCard(lead: LeadData & { _id?: unknown }, timeZone: string): string {
   const a = lead.answers ?? {};
-  const head = lead.urgent
-    ? '🔴 <b>SHOSHILINCH LEAD</b>'
-    : lead.readyReason === 'sold'
-      ? "💰 <b>SOTILDI — to'lovni tekshirib, guruh linkini yuboring</b>"
-      : lead.readyReason === 'refused'
-        ? '❌ <b>KURSDAN VOZ KECHDI</b>'
-        : lead.status === 'SALES'
-          ? '📋 <b>ANKETA TUGADI — AI kursni sotyapti</b>'
-          : '🔥 <b>YANGI LEAD</b>';
+  const head = lead.urgent ? '🔴 <b>SHOSHILINCH LEAD</b>' : '🔥 <b>YANGI LEAD</b>';
   const userLink = `<a href="tg://user?id=${lead.telegramId}">${escapeHtml(displayName(lead))}</a>`;
   const lines = [
     head,

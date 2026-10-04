@@ -1,13 +1,12 @@
 import { StyleExample } from '../database/models/misc';
 import { detectLanguage, normalize, type Lang } from '../utils/text';
-import { anonymize, classifyCoachReply, maskSalesNumbers } from './anonymizer';
+import { anonymize, isUnsafeCoachReply } from './anonymizer';
 import { identifyCoach, type RawChat } from './chatImport';
 
 export interface ExamplePair {
   client: string;
   coach: string[];
   language: Lang;
-  kind?: 'style' | 'sales';
 }
 
 export function tokenize(text: string): string[] {
@@ -36,19 +35,13 @@ export function buildPairs(chat: RawChat, opts: { coachId?: number; coachName?: 
     const clientText = clientRun.join('\n').trim();
     const coachTexts = coachRun.map((t) => t.trim()).filter(Boolean).slice(0, 3);
     if (clientText && coachTexts.length) {
-      const cleaned = coachTexts.map((t) => anonymize(t, { names }));
-      const kinds = cleaned.map(classifyCoachReply);
-      const isSales = kinds.includes('sales');
-      // unsafe lines are removed; number lines survive only inside a selling exchange (masked)
-      const cleanCoach = cleaned.filter((_, i) => kinds[i] === 'style' || kinds[i] === 'sales' || (isSales && kinds[i] === 'numeric'));
-      if (cleanCoach.length && !(kinds.includes('drop') && cleanCoach.length === 0)) {
-        const kind = isSales ? 'sales' : 'style';
+      const cleanCoach = coachTexts.map((t) => anonymize(t, { names }));
+      if (!cleanCoach.some(isUnsafeCoachReply)) {
         const cleanClient = anonymize(clientText, { names, maskNumbers: true }).slice(0, 300);
         pairs.push({
           client: cleanClient,
-          coach: kind === 'sales' ? cleanCoach.map(maskSalesNumbers) : cleanCoach,
+          coach: cleanCoach,
           language: detectLanguage(cleanCoach.join(' ')) ?? detectLanguage(cleanClient) ?? 'uz',
-          kind,
         });
       }
     }
@@ -93,24 +86,15 @@ export interface RetrievedExample {
  * Picks relevant examples for the current turn: token overlap with the client's message and the
  * next question, same language first, then fills the rest with varied examples so the style stays rich.
  */
-export async function retrieveExamples(
-  query: string,
-  lang: Lang,
-  limit: number,
-  seed = 0,
-  opts: { sales?: boolean } = {},
-): Promise<RetrievedExample[]> {
-  // sales examples (real selling lines) only during the sales stage; style examples always
-  const filter: Record<string, unknown> = opts.sales ? { enabled: true } : { enabled: true, kind: { $ne: 'sales' } };
-  const all = await StyleExample.find(filter as never).select('client coach language tokens kind').lean();
+export async function retrieveExamples(query: string, lang: Lang, limit: number, seed = 0): Promise<RetrievedExample[]> {
+  const all = await StyleExample.find({ enabled: true }).select('client coach language tokens').lean();
   if (!all.length || limit <= 0) return [];
   const q = new Set(tokenize(query));
   const scored = all.map((e, i) => {
     const overlap = (e.tokens ?? []).filter((t) => q.has(t)).length;
     const langBonus = e.language === lang ? 2 : 0;
-    const salesBonus = opts.sales && e.kind === 'sales' ? 4 : 0;
     const jitter = ((i * 9301 + seed * 49297) % 233280) / 233280; // deterministic per lead
-    return { e, score: overlap * 3 + langBonus + salesBonus + jitter };
+    return { e, score: overlap * 3 + langBonus + jitter };
   });
   scored.sort((a, b) => b.score - a.score);
   return scored.slice(0, limit).map(({ e }) => ({ client: e.client, coach: e.coach }));

@@ -28,7 +28,6 @@ const HELP = `<b>TEMUR.FIT AI-yordamchi — admin</b>
 /get &lt;kalit&gt; · /set &lt;kalit&gt; [qiymat] · /reset_setting &lt;kalit&gt;
 /prompt — system promptni ko'rish va yangilash
 /ai_global_off · /ai_global_on — AI ni butunlay o'chirish/yoqish
-/faqat_anketa · /sotuv_rejimi — faqat 5 savol yoki anketa + sotuv
 
 <b>Uslub</b>
 Chat eksportini (.html / .json / .txt) shu yerga yuboring → anonim namunalar
@@ -82,9 +81,6 @@ export function registerAdminHandlers(bot: Bot, app: AppContext): void {
     } catch (err) {
       lines.push(`Gemini: ❌ <code>${escapeHtml((err as Error).message.slice(0, 200))}</code>`);
     }
-    const priceList = await app.settings.get('price_list');
-    const payment = await app.settings.get('payment_details');
-    lines.push(`Sotuv: ${(await app.settings.bool('sales_mode')) ? '✅ yoqilgan' : "⛔️ o'chiq"} · narxlar: ${priceList.trim() ? '✅' : /\d/.test(await app.settings.get('course_info')) ? "⚠️ faqat «Kurs haqida» da" : '❌ kiritilmagan'} · to'lov ma'lumoti: ${payment.trim() ? '✅' : '❌ kiritilmagan'}`);
     const blocked = await Lead.countDocuments({ readyReason: 'send_blocked' });
     const failing = await Lead.countDocuments({ aiFailures: { $gt: 0 } });
     lines.push(`Yuborib bo'lmagan chatlar: ${blocked} · AI xatosi bor chatlar: ${failing}`);
@@ -148,15 +144,6 @@ export function registerAdminHandlers(bot: Bot, app: AppContext): void {
     if (!lead) return reply(ctx, "Topilmadi. /reset 123456789 yoki /reset @username (sozlama uchun: /reset_setting kalit)");
     await app.engine.resetLead(String(lead._id));
     await reply(ctx, `🧹 Tozalandi: ${lead.telegramId}. Keyingi xabarida bot noldan boshlaydi.`);
-  });
-  // quick switch between «only the 5 questions» and «questions + selling»
-  admin.command('faqat_anketa', async (ctx) => {
-    await app.settings.set({ sales_mode: false });
-    await reply(ctx, "📝 Rejim: <b>faqat 5 savol</b>. Anketa tugagach AI to'xtaydi, kartochka sizga keladi.\n/sotuv_rejimi — sotuvni qayta yoqish");
-  });
-  admin.command('sotuv_rejimi', async (ctx) => {
-    await app.settings.set({ sales_mode: true });
-    await reply(ctx, "💰 Rejim: <b>anketa + sotuv</b>. AI kursni to'lovgacha olib boradi.\n/faqat_anketa — faqat 5 savolga qaytish");
   });
   admin.command('ai_global_off', async (ctx) => {
     await app.settings.set({ ai_enabled: false });
@@ -247,8 +234,7 @@ export function registerAdminHandlers(bot: Bot, app: AppContext): void {
     const total = await StyleExample.countDocuments();
     const sample = await StyleExample.aggregate<{ client: string; coach: string[] }>([{ $sample: { size: 3 } }]);
     const s = sample.map((e) => `Mijoz: ${escapeHtml(truncate(e.client, 120))}\nMurabbiy: ${escapeHtml(e.coach.join(' / '))}`).join('\n\n');
-    const sales = await StyleExample.countDocuments({ kind: 'sales' });
-    await reply(ctx, `📚 Namunalar: ${total} (uslub: ${total - sales}, sotuv: ${sales})\n\n${s}`);
+    await reply(ctx, `📚 Namunalar: ${total}\n\n${s}`);
   });
   admin.command('examples_clear', async (ctx) => {
     const r = await StyleExample.deleteMany({});
@@ -304,10 +290,9 @@ export function registerAdminHandlers(bot: Bot, app: AppContext): void {
         coachName: await app.settings.get('coach_name'),
       });
       const total = await StyleExample.countDocuments();
-      const salesCount = await StyleExample.countDocuments({ kind: 'sales' });
       await reply(
         ctx,
-        `✅ Import: ${res.chats} chat, ${res.messages} xabar → ${res.examples} ta anonim namuna (jami ${total}, shundan sotuv namunalari: ${salesCount}).\nIsm, raqam, narx, sog'liq ma'lumotlari olib tashlandi.\n/style_rebuild — uslub profilini yangilash`,
+        `✅ Import: ${res.chats} chat, ${res.messages} xabar → ${res.examples} ta anonim namuna (jami ${total}).\nIsm, raqam, narx, sog'liq ma'lumotlari olib tashlandi.\n/style_rebuild — uslub profilini yangilash`,
       );
     } catch (err) {
       logger.error({ err: (err as Error).message }, 'Import failed');

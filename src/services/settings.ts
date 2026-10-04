@@ -103,11 +103,7 @@ export class SettingsService {
 
 /** Default values (or sha256 of long ones) shipped by earlier versions. */
 const LEGACY_DEFAULTS: Record<string, string[]> = {
-  system_prompt: [
-    'f6ea8c5f084430843919e991f69d1b24233c8df8b42ec9f0c0568d52b0ef109f',
-    '0bb9189f38da4cf30d7f62c616bdd88805689200bd0e822ccf49d70739bed90a',
-    '3c214611741c2c0611a61d492c1ad4c40e8d4144d44817fe11f5d1c113cf3c37',
-  ],
+  system_prompt: ['f6ea8c5f084430843919e991f69d1b24233c8df8b42ec9f0c0568d52b0ef109f'],
   debounce_seconds: ['6'],
   q2_high_uz: ['Tushunarli. Maqsad nechiga tushish? Qancha vazn norma hisoblaysiz?'],
   q2_low_uz: ['Tushunarli. Maqsad massa olishmi? Necha kiloga chiqmoqchisiz?'],

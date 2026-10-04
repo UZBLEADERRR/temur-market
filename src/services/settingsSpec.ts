@@ -37,47 +37,11 @@ export const SETTINGS_SPEC: SettingDef[] = [
       "Onlayn kurs: individual ratsion va trenirovka dasturi, har kuni nazorat, ovqatlar guruhga tashlab boriladi, har 10 kunda vazn va progress rasm. Zalda ham, uyda ham ishlasa bo'ladi.",
   },
   {
-    key: 'price_list',
-    label: 'Narxlar va tariflar (AI sotuvda aynan shuni aytadi)',
-    group: 'Murabbiy',
-    type: 'longtext',
-    default: '',
-  },
-  {
-    key: 'payment_details',
-    label: "To'lov ma'lumoti (karta, kimning nomiga, qanday to'lash) — AI so'zma-so'z yuboradi",
-    group: 'Murabbiy',
-    type: 'longtext',
-    default: '',
-  },
-  { key: 'max_sales_turns', label: "Sotuvda nechta javobdan keyin to'lovga aniq taklif qilinsin", group: 'Xulq', type: 'number', default: 4 },
-  {
     key: 'coach_results',
     label: "O'quvchilar natijalari (AI faqat shulardan misol keltiradi)",
     group: 'Murabbiy',
     type: 'longtext',
     default: "100 ga yaqin odam 40 kunlik tizimda yaxshi natija qilgan. Natija har kimning harakatiga bog'liq, kafolat berilmaydi.",
-  },
-  {
-    key: 'sales_prompt',
-    label: 'Sotuv skripti (anketadan keyin AI shu bo\'yicha kursni sotadi)',
-    group: 'AI',
-    type: 'longtext',
-    default: `Anketa tugadi. Endi kursni sot — lekin sotuvchi kabi emas, {{coach_name}}ning o'zi kabi: do'stona, ishonchli, qisqa. Mijoz «menga sotishyapti» emas, «meni tushunishdi va yordam berishmoqchi» deb his qilsin.
-
-Qanday sotish:
-1. Avval tingla va ko'rsat: mijozning o'z so'zlari bilan uning holatini qaytar («Demak, vaqt yetmagani uchun to'xtab qolgansiz»). Uning maqsadi va oldingi muammosiga bog'la.
-2. Yechimni oddiy tilda ayt: aynan unga nima beramiz (ratsion, dastur, har kungi nazorat — KURS HAQIDA dan). Umumiy reklama emas, uning holatiga mos 1–2 gap.
-3. Narxni yashirma, lekin ro'yxat qilib tashlama: mos formatni narxi bilan oddiy gapda ayt. Kerak bo'lsa narxni kunlikka bo'lib ko'rsat («kuniga taxminan bir choy puli»). Faqat bazadagi narx, tarif va shartlar; chegirma, bonus, kafolat yoki muddatni o'zingdan to'qima.
-4. Har xabar oxirida suhbatni oldinga suradigan bitta yengil savol: «Sizga shu format to'g'ri keladimi?», «Qachondan boshlasak qulay?», «Boshlaymizmi?».
-5. E'tirozlarda bahslashma — avval tan ol («tushunaman, pul oson topilmaydi»), keyin bitta kuchli dalil yoki O'QUVCHILAR NATIJALARIdan qisqa haqiqiy misol, keyin yana yengil savol. Bir e'tirozga ikki martadan ortiq qaytma.
-6. «O'ylab ko'raman», «keyinroq», «maslahatlashay» desa — rozilik bildir, nima ikkilantirayotganini yumshoq so'ra (narxmi, vaqtmi, ishonchmi, oila bilanmi) va aynan shunga javob ber. Vaqt aytsa yoki «ertaga yozsam bo'ladimi?» deb kelishsangiz — follow_up_at ga o'sha vaqtni yoz va qisqa javob ber («Hop, ertaga yozaman»). Qayta-qayta bosim qilma.
-7. Mijoz rozi bo'lsa — to'lov ma'lumotini ber va to'lovdan keyin chek (skrinshot) yuborishini so'ra.
-8. Mijoz to'lov qildim desa yoki chek/skrinshot yuborsa → action=SOLD, reason=paid: qisqa samimiy minnatdorchilik va «tekshirib, guruh linkini yuboraman». Linkni o'zing yuborma, to'lovni tasdiqlama.
-9. Bazada to'lov ma'lumoti bo'lmasa: mijoz aniq rozi bo'lganda → action=SOLD, reason=agreed.
-10. Mijoz qat'iy rad etsa → action=REFUSED, iliq xayrlash, eshik ochiq qolsin («fikringiz o'zgarsa yozing»).
-11. Bazada yo'q chegirma yoki maxsus shart so'rasa yoki murabbiyning o'zini so'rasa → action=READY, reason=wants_coach.
-12. Hech qachon yolg'on shoshilinchlik («faqat bugun», «oxirgi joy») yaratma, agar bu bazada yozilmagan bo'lsa.`,
   },
   { key: 'system_prompt', label: 'System prompt', group: 'AI', type: 'longtext', default: DEFAULT_SYSTEM_PROMPT },
   { key: 'style_profile', label: 'Uslub profili', group: 'AI', type: 'longtext', default: DEFAULT_STYLE_PROFILE },
@@ -154,12 +118,6 @@ Qanday sotish:
     "Ha, savollarga AI-yordamchim javob beryapti, lekin hammasini o'zim ko'rib turibman. Hozir o'zim yozaman.",
     'Да, на вопросы отвечает мой AI-помощник, но я всё вижу сам. Сейчас сам напишу.',
   ),
-  ...q(
-    'sales_reminder',
-    'Sotuv bosqichidagi eslatma',
-    "Qaror qildingizmi? Savollaringiz bo'lsa bemalol yozing",
-    'Решили? Если есть вопросы — пишите',
-  ),
   ...q('ready_message', '[TAYYOR] dagi yakuniy xabar (AI yozmasa / ehtiyot holatida)', 'Tushunarli', 'Понятно'),
   ...q(
     'ack_words',
@@ -175,16 +133,6 @@ Qanday sotish:
     'Здравствуйте. Ответьте, пожалуйста, на вопросы, потом сам всё подробно расскажу',
   ),
 
-  { key: 'sales_mode', label: "Anketadan keyin AI kursni oxirigacha sotsin (o'chiq = faqat 5 savol)", group: 'Xulq', type: 'boolean', default: true },
-  { key: 'ai_after_sale', label: 'Sotuvdan keyin ham AI mijoz bilan yozishsin (murabbiy yordamchisi)', group: 'Xulq', type: 'boolean', default: true },
-  { key: 'max_follow_ups', label: "«O'ylab ko'raman» dan keyin maksimum eslatma", group: 'Xulq', type: 'number', default: 2 },
-  {
-    key: 'coach_message_stops_ai',
-    label: "Murabbiy o'zi yozsa AI to'xtasin (o'chiq = AI murabbiy xabarini hisobga olib davom etadi)",
-    group: 'Xulq',
-    type: 'boolean',
-    default: false,
-  },
   { key: 'allow_advice', label: "Umumiy murabbiy maslahatlari berishi mumkin", group: 'Xulq', type: 'boolean', default: true },
   { key: 'flood_limit', label: "Spam himoyasi: 5 daqiqada maksimum xabar (oshsa AI to'xtaydi)", group: 'Xulq', type: 'number', default: 40 },
   { key: 'max_images_per_turn', label: "Bir javobda AI ko'radigan maksimum rasm", group: 'Xulq', type: 'number', default: 3 },

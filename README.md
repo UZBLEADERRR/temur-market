@@ -49,54 +49,6 @@ Asosiy manba — texnik topshiriq (2-versiya) va system prompt v3.2. Prompt matn
 
   Botda ham shunday buyruqlar bor: `/reset <id>`, `/always_on <id>`, `/always_off <id>`.
 
-### Sotuv (anketadan keyin)
-
-Bu oqim `sales_mode` sozlamasi yoqilganda ishlaydi (standart holatda yoqilgan).
-1. 5 ta savol tugagach, Temurga "📋 ANKETA TUGADI — AI kursni sotyapti" kartochkasi keladi. Lead holati **SALES** (Sotuvda) bo'ladi.
-2. AI mijozning javoblariga tayanib mos format taklif qiladi. Narx, tarif va to'lov ma'lumotini faqat "Kurs haqida" bo'limidan oladi. E'tirozlarga o'quvchilar natijalari bilan javob beradi va har xabarda bitta savol bilan suhbatni oldinga suradi.
-3. Mijoz to'lov qilganini aytsa yoki chek skrinshotini yuborsa (AI rasmni ko'radi), AI minnatdorchilik bildiradi va "tekshirib, guruh linkini yuboraman" deydi. Shundan keyin to'xtaydi va Temurga **"💰 SOTILDI — guruh linkini yuboring"** kartochkasi keladi. Guruh linkini Temur o'zi yuboradi.
-4. Mijoz rad etsa, AI xushmuomala xayrlashadi va "❌ Kursdan voz kechdi" kartochkasi keladi.
-5. Bazada yo'q chegirma so'ralsa yoki mijoz Temurning o'zini so'rasa, chat Temurga o'tadi.
-6. Sotuv skripti mini ilovada **Sozlamalar → AI → Sotuv skripti** bo'limida tahrirlanadi.
-7. **Pulgacha olib borish.** Kod sotuv bosqichini kuzatib boradi:
-   - birinchi sotuv xabari → taklif, **aniq narx** va yopish savoli;
-   - mijoz rozi bo'lsa → **to'lov ma'lumoti** (mini ilovadagi matn so'zma-so'z yuboriladi) va chek so'raladi;
-   - chek yoki "to'ladim" → SOLD.
-
-   `max_sales_turns` (standart 4) ta javobdan keyin AI aniq yopish savoliga o'tadi: "To'lov ma'lumotini yuboraymi?".
-8. Narx va to'lov ma'lumoti mini ilovadagi **"Murabbiy haqida" → "Narxlar va tariflar"** hamda **"To'lov ma'lumoti"** maydonlariga yoziladi. Narx kiritilmagan bo'lsa, adminga ogohlantirish keladi. Hammasi to'g'ri sozlanganini `/status` buyrug'i bilan tekshirish mumkin.
-
-Sotuv bosqichidagi eslatma: "Qaror qildingizmi? Savollaringiz bo'lsa bemalol yozing".
-
-### Tabiiy sotuv
-
-- **Sotuv skripti "sotuvchi" emas, Temur ohangida.** Avval mijozning o'z so'zlari bilan uning holati qaytariladi ("demak, vaqt yetmagani uchun to'xtab qolgansiz"). Keyin unga mos yechim oddiy tilda aytiladi, narx ro'yxat qilib emas, gap ichida beriladi (kerak bo'lsa kunlikka bo'lib). Har xabar bitta yengil savol bilan tugaydi.
-- **E'tirozlar:** avval tan olinadi, keyin bitta kuchli dalil yoki o'quvchi natijasi keltiriladi. Bir e'tirozga ikki martadan ortiq qaytilmaydi. Soxta shoshilinchlik ("faqat bugun") yo'q.
-- **Bot/reklama iboralari taqiqlangan:** "Ajoyib savol", "Hurmatli mijoz", "Eksklyuziv imkoniyat" va hokazo. Ro'yxat va emoji to'lqini ham yo'q. Mijozga ba'zan ismi bilan murojaat qilinadi.
-- **Temurning haqiqiy sotuv namunalari.** Chat eksportidan narx, chegirma, tarif va e'tiroz haqidagi javoblar alohida **sotuv namunasi** sifatida olinadi. Raqamlar `[narx]` va `N` bilan yashiriladi. Bu namunalar faqat sotuv bosqichida ishlatiladi, narxlar esa doim "Narxlar" maydonidan olinadi.
-- **Odamdek vaqt:** javobdan oldin 1–2 soniya "o'qish" pauzasi bor, yozish tezligi ham har safar biroz farq qiladi.
-
-**Sotuv namunalarini olish uchun** eksportni qayta yuklang: `/examples_clear`, keyin `messages.html` ni botga qayta yuboring. Import javobida "sotuv namunalari: N" ko'rinadi.
-
-### «O'ylab ko'raman», karta va sotuvdan keyin
-
-- **«O'ylab ko'raman», «keyinroq», «maslahatlashay» desa:** AI bosim qilmaydi. Nima ikkilantirayotganini yumshoq so'raydi (narx, vaqt, ishonch, oila) va aynan shunga javob beradi.
-- **Mijoz vaqt aytsa** («ertaga», «kechqurun»): AI «Hop, ertaga yozaman» deydi va o'sha vaqtda o'zi eslatma yozadi. Eslatmada mijoz nima deganini hisobga oladi.
-  - Telegram qoidasi bo'yicha eslatma mijozning oxirgi xabaridan keyingi 24 soat ichida yuboriladi. Kechasi (22:00–09:00) yuborilmaydi.
-  - Bitta mijozga ko'pi bilan 2 ta eslatma yuboriladi (`max_follow_ups`).
-  - Mijoz o'zi yozsa, rejalashtirilgan eslatma bekor qilinadi.
-- **Karta:** "To'lov ma'lumoti" maydoni bo'sh bo'lsa, AI "Kurs haqida" ichidagi karta raqami yozilgan qatorni (va yonidagi karta egasi qatorini) aynan o'zgartirmasdan yuboradi.
-- **Sotuvdan keyin** (`ai_after_sale`, standart holatda yoqilgan): AI murabbiy yordamchisi sifatida yozishishni davom ettiradi. Guruh linkini va to'lov tasdig'ini baribir Temur o'zi beradi.
-- **Rejimni almashtirish:** mini ilova → Sozlamalar → "Bot rejimi" → **📝 Faqat 5 savol** / **💰 Anketa + sotuv**. Botda: `/faqat_anketa`, `/sotuv_rejimi`.
-
-### Temur o'zi yozsa
-
-Standart holatda AI **to'xtamaydi**:
-- Temurning xabari tarixda "Temur (O'ZI yozgan)" deb belgilanadi va AI uni ustun deb biladi: aytilgan narx, chegirma yoki ko'rsatmaga amal qiladi, unga zid gapirmaydi.
-- Mijozning Temur javob bergan xabarlariga AI qayta javob bermaydi.
-
-Eski xulq (Temur yozsa AI butunlay o'chadi) kerak bo'lsa, `coach_message_stops_ai` sozlamasini yoqing.
-
 ### Admin nimalarni o'zgartira oladi (kod yozmasdan)
 
 Bot ichida (`/settings`, `/set`, `/prompt`) yoki mini ilovaning **Sozlamalar** bo'limida quyidagilarni o'zgartirish mumkin:

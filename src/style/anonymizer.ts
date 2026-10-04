@@ -44,35 +44,6 @@ export function anonymize(text: string, opts: AnonymizeOptions = {}): string {
 }
 
 /** Coach replies that must never be used as style examples (prices, cards, diet plans, client-specific promises). */
-export type CoachReplyKind = 'style' | 'sales' | 'numeric' | 'drop';
-
-const SALES_WORDS = /(narx|tarif|chegirma|to'lov|garantiya|kafolat|natija|individual|gruppa|guruh|kunlik|kuniga|ishlash|цена|стоимост|скидк|оплат|гарант|результат)/;
-const DIET_WORDS = /(\d+\s*(g|gr|гр|kkal|ккал)\b|tuxum|avsyanka|grechka|ratsion|nonushta|tushlik|kechki ovqat)/;
-
-/**
- * style = safe tone example (no numbers / prices);
- * sales = TEMUR's real selling / objection-handling lines, kept with numbers masked as [narx]/N so the model learns
- *         HOW he sells, while prices always come from the admin's price list;
- * drop  = contact data, long texts, diet plans, letterless replies.
- */
-export function classifyCoachReply(text: string): CoachReplyKind {
-  if (/\[(karta|telefon|link|email)\]/.test(text)) return 'drop';
-  if (text.length > 350 || !/\p{L}/u.test(text) || text.split('\n').length > 5) return 'drop';
-  const n = normalize(text);
-  if (DIET_WORDS.test(n)) return 'drop';
-  if (SALES_WORDS.test(n) || /\[narx\]/.test(text)) return 'sales';
-  // numbers without selling context (weights, progress, grams) — only kept next to a selling line
-  if (/\d/.test(n)) return 'numeric';
-  return 'style';
-}
-
-/** Masks every number in a sales line: prices become [narx], other numbers N. */
-export function maskSalesNumbers(text: string): string {
-  return text
-    .replace(/\d+(?:[.,]\d+)?\s*(kun|kg|%|oy|hafta|kishi|ta\b|yil|soat|дн|кг|мес)/gi, 'N$1')
-    .replace(/\d[\d\s.,]*/g, (m) => (/\s$/.test(m) ? '[narx] ' : '[narx]'));
-}
-
 export function isUnsafeCoachReply(text: string): boolean {
   const n = normalize(text);
   if (/\[(narx|karta|telefon|link|email)\]/.test(text)) return true;

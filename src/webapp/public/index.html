@@ -48,7 +48,6 @@
   .b-PAID { background: #d3f5e1; color: #13653c; }
   .b-REJECTED { background: #fbdcdc; color: #8f1d1d; }
   .b-QUESTIONNAIRE, .b-NEW { background: #ececec; color: #555; }
-  .b-SALES { background: #efe3ff; color: #5b2a9e; }
   .urgent { color: var(--danger); font-weight: 700; }
   .card { background: var(--bg2); border-radius: 14px; padding: 14px; margin: 10px 0; }
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; }
@@ -112,14 +111,6 @@
   <section id="tab-settings" class="hidden">
     <h2>Sozlamalar</h2>
     <p class="muted">Prompt, savollar, eslatmalar, kalit so'zlar — hammasi shu yerda. O'zgarish darhol kuchga kiradi.</p>
-    <div class="card" id="modeCard">
-      <b>Bot rejimi</b>
-      <div class="row" style="margin-top:8px">
-        <button class="btn secondary" id="modeQuiz">📝 Faqat 5 savol</button>
-        <button class="btn secondary" id="modeSales">💰 Anketa + sotuv</button>
-      </div>
-      <p class="muted" id="modeHint"></p>
-    </div>
     <div id="settingsForm"></div>
   </section>
 
@@ -154,9 +145,9 @@ if (tg) { tg.ready(); tg.expand(); }
 const initData = tg ? tg.initData : '';
 const urlToken = new URLSearchParams(location.search).get('token') || '';
 
-const STATUS = { NEW: 'Yangi', QUESTIONNAIRE: 'Anketa', SALES: 'Sotuvda', READY: 'Kutmoqda', ANSWERED: 'Javob berildi', PAID: "To'ladi", REJECTED: 'Rad etdi' };
-const REASONS = { completed: '5 savol tugadi', wants_coach: "Murabbiyni so'radi", bot_question: '«Botmisiz?»', safety: '⚠️ Xavfli holat', low_target_bmi: '⚠️ Past maqsad TMI', manual_takeover: "Murabbiy o'zi yozdi", not_lead: "Kurs bo'yicha emas", flood: '⚠️ Spam', send_blocked: "⚠️ Telegram yuborishga ruxsat bermadi (pauza?)", sold: '💰 Sotildi — guruh linkini yuboring', refused: 'Voz kechdi' };
-const FILTERS = [['', 'Hammasi'], ['QUEUE', '⏳ Navbat'], ['QUESTIONNAIRE', 'Anketa'], ['SALES', '💬 Sotuvda'], ['ANSWERED', 'Javob berildi'], ['PAID', "To'ladi"], ['REJECTED', 'Rad etdi']];
+const STATUS = { NEW: 'Yangi', QUESTIONNAIRE: 'Anketa', READY: 'Kutmoqda', ANSWERED: 'Javob berildi', PAID: "To'ladi", REJECTED: 'Rad etdi' };
+const REASONS = { completed: '5 savol tugadi', wants_coach: "Murabbiyni so'radi", bot_question: '«Botmisiz?»', safety: '⚠️ Xavfli holat', low_target_bmi: '⚠️ Past maqsad TMI', manual_takeover: "Murabbiy o'zi yozdi", not_lead: "Kurs bo'yicha emas", flood: '⚠️ Spam', send_blocked: "⚠️ Telegram yuborishga ruxsat bermadi (pauza?)" };
+const FILTERS = [['', 'Hammasi'], ['QUEUE', '⏳ Navbat'], ['QUESTIONNAIRE', 'Anketa'], ['ANSWERED', 'Javob berildi'], ['PAID', "To'ladi"], ['REJECTED', 'Rad etdi']];
 let currentFilter = 'QUEUE';
 let currentLeadId = null;
 let currentTab = 'leads';
@@ -303,7 +294,7 @@ async function loadStats() {
   const { stats: s, totals } = await api('/stats' + (date ? '?date=' + date : ''));
   const card = (n, l) => `<div class="stat"><b>${n}</b>${l}</div>`;
   $('statsBox').innerHTML = `<h3>Kun bo'yicha</h3><div class="stats">
-    ${card(s.newLeads, 'Yangi leadlar')}${card(s.completed, 'Anketa tugagan')}${card(s.sold, '💰 AI sotdi')}${card(s.answered, 'Javob berilgan')}
+    ${card(s.newLeads, 'Yangi leadlar')}${card(s.completed, 'Anketa tugagan')}${card(s.answered, 'Javob berilgan')}
     ${card(s.paid, "To'lagan")}${card(s.rejected, 'Rad etgan')}${card(s.urgent, 'Shoshilinch')}${card(s.waiting, 'Hozir navbatda')}</div>
     <h3>Manbalar (shu kun)</h3>${s.bySource.map((x) => `<div class="row" style="justify-content:space-between"><span>${esc(x.source)}</span><b>${x.count}</b></div>`).join('') || '<p class="muted">—</p>'}
     <h3>Jami status bo'yicha</h3><div class="stats">${Object.entries(totals).map(([k, v]) => card(v, STATUS[k] || k)).join('')}</div>`;
@@ -317,23 +308,7 @@ async function loadSettings() {
   settingsCache = await api('/settings');
   renderSettingsForm($('coachForm'), (d) => d.group === 'Murabbiy');
   renderSettingsForm($('settingsForm'), (d) => d.group !== 'Murabbiy');
-  renderMode();
 }
-function renderMode() {
-  const on = settingsCache.values.sales_mode === true || settingsCache.values.sales_mode === 'true';
-  $('modeQuiz').className = 'btn ' + (on ? 'secondary' : '');
-  $('modeSales').className = 'btn ' + (on ? '' : 'secondary');
-  $('modeHint').textContent = on
-    ? "Anketadan keyin AI kursni to'lovgacha sotadi, «o'ylab ko'raman» desa keyin o'zi eslatadi."
-    : "Anketa tugagach AI to'xtaydi va kartochka sizga keladi.";
-}
-async function setMode(on) {
-  await api('/settings', { method: 'PUT', body: { values: { sales_mode: on } } });
-  toast(on ? 'Anketa + sotuv' : 'Faqat 5 savol');
-  loadSettings();
-}
-$('modeQuiz').onclick = () => setMode(false);
-$('modeSales').onclick = () => setMode(true);
 function renderSettingsForm(root, filter) {
   const { spec, values } = settingsCache;
   let html = ''; let group = '';

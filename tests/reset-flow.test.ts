@@ -20,7 +20,6 @@ const bm = (chatId: number, fromId: number, id: number, text: string): Update =>
 describe('reset flow through Telegram handlers', () => {
   it('after coach takeover + reset, "Salom" gets an answer', async () => {
     const ctx = buildApp();
-    await ctx.settings.set({ coach_message_stops_ai: true });
     const bot = new Bot('123:TEST', { botInfo: { id: 1, is_bot: true, first_name: 'B', username: 'b' } as never });
     bot.api.config.use(async (_p, method) =>
       method === 'getBusinessConnection'

@@ -38,8 +38,6 @@ const StyleExampleSchema = new Schema(
     language: { type: String, enum: ['uz', 'ru'], default: 'uz' },
     tokens: { type: [String], default: [] },
     source: { type: String, default: 'import' },
-    /** style = tone only; sales = Temur's real selling lines (numbers masked), used in the sales stage. */
-    kind: { type: String, enum: ['style', 'sales'], default: 'style' },
     enabled: { type: Boolean, default: true },
   },
   { timestamps: true, collection: 'style_examples' },

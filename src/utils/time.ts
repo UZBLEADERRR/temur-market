@@ -47,29 +47,3 @@ export function formatDateTime(date: Date | undefined | null, timeZone: string):
     minute: '2-digit',
   }).format(date);
 }
-
-/** Local wall-clock parts of an instant in a time zone. */
-export function zonedParts(date: Date, timeZone: string) {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', weekday: 'short',
-  }).formatToParts(date);
-  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? '';
-  return { year: Number(get('year')), month: Number(get('month')), day: Number(get('day')), hour: Number(get('hour')), minute: Number(get('minute')), weekday: get('weekday') };
-}
-
-/** "2026-10-04 21:15 (Sun)" in the given zone — given to the model as "now". */
-export function formatLocal(date: Date, timeZone: string): string {
-  const p = zonedParts(date, timeZone);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${p.year}-${pad(p.month)}-${pad(p.day)} ${pad(p.hour)}:${pad(p.minute)} (${p.weekday})`;
-}
-
-/** Parses a local "YYYY-MM-DD HH:mm" in the zone to a UTC instant. */
-export function parseLocal(value: string, timeZone: string): Date | undefined {
-  const m = value.trim().match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{1,2}):(\d{2})/);
-  if (!m) return undefined;
-  const guess = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]));
-  const offset = tzOffsetMs(new Date(guess), timeZone);
-  const d = new Date(guess - offset);
-  return Number.isNaN(d.getTime()) ? undefined : d;
-}

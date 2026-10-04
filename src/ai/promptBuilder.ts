@@ -18,10 +18,6 @@ Faqat JSON qaytar, boshqa hech narsa yozma:
 - RASMLAR: mijoz rasm yuborsa (qomat, ovqat, skrinshot) — rasm so'rovga ilova qilingan. Qisqa, samimiy va hurmat bilan izoh ber (tana haqida kamsituvchi so'z yo'q, tashxis yo'q, aniq foiz/kilo taxmin qilma), keyin suhbatni davom ettir. Rasmdagi narsani to'qima.
 - SPAM: ko'p rasm, stiker, reklama, havola yoki mavzuga aloqasiz xabarlarga chalg'ima — ularni e'tiborsiz qoldir va anketani davom ettir; faqat stiker/emoji bo'lsa NO_RESPONSE.
 - MASLAHAT: ruxsat berilgan bo'lsa, haqiqiy murabbiydek qisqa umumiy maslahat ber (1–3 gap: mashg'ulot muntazamligi, oqsil, uyqu, suv, yurish, sabr). Shaxsiy ratsion/dastur, kaloriya raqamlari, dori, tibbiy tashxis — yo'q: «shaxsiy dasturni kurs ichida tuzib beraman» de.
-- MURABBIY XABARLARI: tarixda «(O'ZI yozgan)» deb belgilangan xabarlarni murabbiyning o'zi yozgan. Ular ustun: aytgan narxi, chegirmasi, va'dasi va ko'rsatmasiga amal qil, ularga zid gapirma, takrorlama; u savol bergan bo'lsa va mijoz javob bergan bo'lsa — suhbatni shu yerdan tabiiy davom ettir.
-- TABIIY BO'L: real odam Telegram'da qanday yozsa shunday — qisqa, oddiy so'zlar, ba'zan bitta so'zli javob ham bo'ladi. Ro'yxat, raqamlangan punktlar, sarlavha, «!!!», har xabarda emoji — yo'q. Mijozning o'z so'zlarini qaytarib ishlat.
-- ISHLATMA (bot/reklama ohangi): «Ajoyib savol», «Sizga yordam berishdan mamnunman», «Hurmatli mijoz», «Albatta!» bilan har xabarni boshlash, «Biz sizga taklif qilamiz», «Eksklyuziv imkoniyat», «Shoshiling!», «Sizning muvaffaqiyatingiz — bizning maqsadimiz».
-- NAMUNALARda «[narx]» va «N» — yashirilgan raqamlar: ulardan faqat uslub va sotish usulini ol, narxni har doim NARXLAR / BILIMLAR BAZASIdan ayt.
 - PAUSE: mijoz "keyinroq yozaman" desa → bitta juda qisqa javob (masalan «Hop»), savol berma.
 - NO_RESPONSE: xabar javob talab qilmaydi (stiker, "ok" va savol allaqachon berilgan) → messages: [].
 - extracted: faqat mijoz shu suhbatda aniq aytgan ma'lumot, aks holda null. Raqamlar raqam bo'lsin (bo'y sm, vazn kg). goal — qisqa matn ("ozish 85 kg gacha"). trainingLocation: "zal" yoki "uy". healthProblems: muammo bo'lmasa "yo'q".
@@ -51,14 +47,6 @@ export interface PromptInput {
   ackWords: string;
   intentPending: boolean;
   coachMode?: boolean;
-  salesMode?: boolean;
-  salesPrompt?: string;
-  salesDirective?: string;
-  nowLocal?: string;
-  clientName?: string;
-  soldContext?: boolean;
-  priceList?: string;
-  paymentDetails?: string;
   allowAdvice?: boolean;
   photos?: number;
   lastAiMessages: string[];
@@ -82,11 +70,10 @@ export function buildSystem(input: PromptInput): string {
 
 export function buildUserText(input: PromptInput): string {
   const known = Object.fromEntries(Object.entries(input.answers ?? {}).filter(([, v]) => v !== undefined && v !== null && v !== ''));
-  const who = (s: string) => (s === 'client' ? 'Mijoz' : s === 'temur' ? `${input.coachName} (O'ZI yozgan)` : input.coachName);
+  const who = (s: string) => (s === 'client' ? 'Mijoz' : input.coachName);
   return [
     '== MIJOZ HOLATI (kod hisoblagan) ==',
     `Mijoz tili: ${input.lang === 'ru' ? 'rus' : "o'zbek lotin"}`,
-    input.clientName ? `Mijoz ismi (Telegram): ${input.clientName} — ba'zan, tabiiy joyda ism bilan murojaat qil (har xabarda emas; ism g'alati yoki taxallus bo'lsa ishlatma).` : '',
     `Ma'lum javoblar: ${JSON.stringify(known)}`,
     `TMI: ${input.bmi ?? "noma'lum"}`,
     `Oxirgi berilgan savol: ${input.askedStep}/5 (answered_current shu savol haqida)`,
@@ -94,28 +81,13 @@ export function buildUserText(input: PromptInput): string {
     input.missing ? `Joriy savolda yetishmayapti: ${input.missing}` : '',
     `QOLGAN SAVOLLAR (tartib bilan):\n${input.remainingQuestions.map((q) => `${q.step}. «${q.text}»`).join('\n')}`,
     input.intentPending ? "MAQSAD ANIQLANMAGAN: mijoz kurs bo'yicha yozyaptimi? intent ni aniqla (ozish, semirish, ozg'inlik, qomat, maslahat so'rash — bularning hammasi course)." : '',
-    input.salesMode
-      ? [
-          "REJIM: SOTUV. Anketa savollarini berma. Bu rejimda «faqat 5 ta savol» va «savollardan keyin aytaman» qoidalari AMAL QILMAYDI — narx va to'lovni aniq ayt.",
-          input.salesPrompt ?? '',
-          `NARXLAR: ${input.priceList || "(alohida kiritilmagan — BILIMLAR BAZASIdagi «Kurs haqida» dan ol)"}`,
-          `TO'LOV MA'LUMOTI: ${input.paymentDetails || "(kiritilmagan — mijoz rozi bo'lsa SOLD reason=agreed)"}`,
-          `KEYINGI QADAM: ${input.salesDirective ?? ''}`,
-          `HOZIRGI VAQT (mijoz vaqti): ${input.nowLocal ?? ''}`,
-          "follow_up_at: mijoz keyinroq/ertaga qaror qilishini aytsa — qachon yozish kerakligi, \"YYYY-MM-DD HH:mm\" (mijoz vaqti bilan; aniq aytmasa ertaga shu paytga yaqin). follow_up_note: nima haqida (masalan «narxni oilasi bilan maslahatlashadi»). Aks holda null.",
-          "sales_step: javobing qaysi bosqichga yetkazdi — 1 = taklif va ANIQ NARX aytildi, 2 = yopish savoli berildi («boshlaymizmi?»), 3 = to'lov ma'lumoti yuborildi.",
-          'Actionlar: ASK_NEXT (sotuvni davom ettirish, question=null), SOLD, REFUSED, READY (reason=wants_coach), URGENT_READY, NO_RESPONSE.',
-        ].join('\n')
-      : '',
     input.coachMode
-      ? `REJIM: anketa tugagan. Sen murabbiy yordamchisisan: mijoz savoliga javob ber, qo'llab-quvvatla, umumiy maslahat ber. Anketa savollarini berma. action=ASK_NEXT (question=null) yoki NO_RESPONSE.${
-          input.soldContext ? " Mijoz kursni sotib olgan: guruh linkini va to'lov tasdig'ini murabbiy o'zi beradi — linkni o'zing berma, «tez orada yuboraman» de." : ''
-        }`
+      ? "REJIM: anketa tugagan. Sen murabbiy yordamchisisan: mijoz savoliga javob ber, qo'llab-quvvatla, umumiy maslahat ber. Anketa savollarini berma. action=ASK_NEXT (question=null) yoki NO_RESPONSE."
       : '',
     `MASLAHAT: ${input.allowAdvice === false ? "ruxsat yo'q — maslahat so'ralsa, savollardan keyin o'zim aytaman de" : 'ruxsat bor (umumiy, qisqa)'}`,
     input.photos ? `Mijoz ${input.photos} ta rasm yubordi (ilova qilingan).` : '',
     `ROST JAVOB matni («botmisiz?» uchun): «${input.botAnswer}»`,
-    input.salesMode ? '' : `Bazada javobi yo'q savolga: «${input.priceReply}»`,
+    `Bazada javobi yo'q savolga: «${input.priceReply}»`,
     `TASDIQ SO'ZLARI: ${input.ackWords}`,
     input.lastAiMessages.length ? `OXIRGI JAVOBLARING (takrorlama): ${input.lastAiMessages.map((m) => `«${m}»`).join(' ')}` : '',
     input.summary ? `\n== OLDINGI SUHBAT XULOSASI ==\n${input.summary}` : '',

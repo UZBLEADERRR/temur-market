@@ -62,14 +62,3 @@ describe('reminders', () => {
     expect(ctx.gateway.textsTo(55).at(-1)).toBe('Жду ответа 🙂');
   });
 });
-
-describe('sales reminders', () => {
-  it('in the sales stage the sales reminder text is used', async () => {
-    const ctx = buildApp();
-    await ctx.engine.handleClientMessage(clientMsg(56, 'Salom, kurs haqida'));
-    const t0 = new Date('2026-10-01T10:00:00Z');
-    await Lead.updateOne({ chatId: 56 }, { $set: { status: 'SALES', lastClientMessageAt: t0, lastOutgoingAt: t0 } });
-    expect(await ctx.reminders.tick(new Date(t0.getTime() + 61 * 60_000))).toBe(1);
-    expect(ctx.gateway.textsTo(56).at(-1)).toBe("Qaror qildingizmi? Savollaringiz bo'lsa bemalol yozing");
-  });
-});

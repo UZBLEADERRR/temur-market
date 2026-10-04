@@ -2,6 +2,7 @@ import { webhookCallback } from 'grammy';
 import { run, type RunnerHandle } from '@grammyjs/runner';
 import { assertProductionEnv, env } from './config/env';
 import { connectDatabase, disconnectDatabase } from './database/connection';
+import { runDataMigrations } from './database/migrations';
 import { SettingsService } from './services/settings';
 import { GeminiClient } from './ai/geminiClient';
 import { AiService } from './ai/aiService';
@@ -20,6 +21,7 @@ import { MINUTE } from './utils/time';
 async function main() {
   assertProductionEnv(env);
   await connectDatabase(env.MONGODB_URI);
+  await runDataMigrations();
 
   const settings = new SettingsService();
   const migrated = await settings.migrateLegacyDefaults();
@@ -32,7 +34,7 @@ async function main() {
   const bot = createBot(env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_API_ROOT);
   const gateway = new GrammyGateway(bot, env.adminIds, env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_API_ROOT);
   const leads = new LeadService({ gateway, timeZone: env.TZ_NAME, publicUrl: env.publicUrl });
-  const engine = new ConversationEngine({ gateway, ai, settings, leads }, { timeZone: env.TZ_NAME });
+  const engine = new ConversationEngine({ gateway, ai, settings, leads });
   const reminders = new ReminderService(engine, settings);
   const app: AppContext = { env, settings, ai, engine, leads, reminders, gateway };
 
@@ -57,8 +59,6 @@ async function main() {
         { command: 'navbat', description: 'Javob kutayotgan mijozlar' },
         { command: 'stats', description: 'Kunlik statistika' },
         { command: 'export', description: 'Excel eksport' },
-        { command: 'faqat_anketa', description: 'Rejim: faqat 5 savol' },
-        { command: 'sotuv_rejimi', description: 'Rejim: anketa + sotuv' },
         { command: 'settings', description: 'Sozlamalar' },
         { command: 'prompt', description: 'System prompt' },
         { command: 'help', description: 'Yordam' },
