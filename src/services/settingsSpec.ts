@@ -37,6 +37,21 @@ export const SETTINGS_SPEC: SettingDef[] = [
       "Onlayn kurs: individual ratsion va trenirovka dasturi, har kuni nazorat, ovqatlar guruhga tashlab boriladi, har 10 kunda vazn va progress rasm. Zalda ham, uyda ham ishlasa bo'ladi.",
   },
   {
+    key: 'price_list',
+    label: 'Narxlar va tariflar (AI sotuvda aynan shuni aytadi)',
+    group: 'Murabbiy',
+    type: 'longtext',
+    default: '',
+  },
+  {
+    key: 'payment_details',
+    label: "To'lov ma'lumoti (karta, kimning nomiga, qanday to'lash) — AI so'zma-so'z yuboradi",
+    group: 'Murabbiy',
+    type: 'longtext',
+    default: '',
+  },
+  { key: 'max_sales_turns', label: "Sotuvda nechta javobdan keyin to'lovga aniq taklif qilinsin", group: 'Xulq', type: 'number', default: 4 },
+  {
     key: 'coach_results',
     label: "O'quvchilar natijalari (AI faqat shulardan misol keltiradi)",
     group: 'Murabbiy',

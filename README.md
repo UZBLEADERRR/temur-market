@@ -58,6 +58,13 @@ Bu oqim `sales_mode` sozlamasi yoqilganda ishlaydi (standart holatda yoqilgan).
 4. Mijoz rad etsa, AI xushmuomala xayrlashadi va "❌ Kursdan voz kechdi" kartochkasi keladi.
 5. Bazada yo'q chegirma so'ralsa yoki mijoz Temurning o'zini so'rasa, chat Temurga o'tadi.
 6. Sotuv skripti mini ilovada **Sozlamalar → AI → Sotuv skripti** bo'limida tahrirlanadi.
+7. **Pulgacha olib borish.** Kod sotuv bosqichini kuzatib boradi:
+   - birinchi sotuv xabari → taklif, **aniq narx** va yopish savoli;
+   - mijoz rozi bo'lsa → **to'lov ma'lumoti** (mini ilovadagi matn so'zma-so'z yuboriladi) va chek so'raladi;
+   - chek yoki "to'ladim" → SOLD.
+
+   `max_sales_turns` (standart 4) ta javobdan keyin AI aniq yopish savoliga o'tadi: "To'lov ma'lumotini yuboraymi?".
+8. Narx va to'lov ma'lumoti mini ilovadagi **"Murabbiy haqida" → "Narxlar va tariflar"** hamda **"To'lov ma'lumoti"** maydonlariga yoziladi. Narx kiritilmagan bo'lsa, adminga ogohlantirish keladi. Hammasi to'g'ri sozlanganini `/status` buyrug'i bilan tekshirish mumkin.
 
 Sotuv bosqichidagi eslatma: "Qaror qildingizmi? Savollaringiz bo'lsa bemalol yozing".
 

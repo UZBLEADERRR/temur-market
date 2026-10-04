@@ -647,3 +647,72 @@ describe('sales stage and coach messages', () => {
     expect(gateway.sent.length).toBe(before);
   });
 });
+
+describe('sales funnel goes all the way to payment', () => {
+  const done = {
+    messages: ['Rahmat!'],
+    action: 'READY',
+    reason: 'completed',
+    answered_current: true,
+    extracted: { trainingExperience: '1 yil', goal: 'ozish', targetWeight: 80, trainingDays: 4, trainingLocation: 'zal', previousAttempts: 'vaqt', healthProblems: "yo'q" },
+  };
+
+  it('first sales message must contain the price; agreement → exact payment details are sent; receipt → SOLD', async () => {
+    const { engine, gateway, llm, settings } = buildApp();
+    await settings.set({
+      price_list: "Individual 50 kun — 800 000 so'm",
+      payment_details: "Karta: 8600 1234 5678 9012\nTemur F.\nTo'lovdan keyin chekni yuboring",
+    });
+    llm.push(done);
+    llm.push((req) => {
+      const t = req.parts.at(-1)!.text!;
+      expect(t).toContain('KEYINGI QADAM: Bu javobda');
+      expect(t).toContain("NARXLAR: Individual 50 kun — 800 000 so'm");
+      expect(t).toContain('«savollardan keyin aytaman» qoidalari AMAL QILMAYDI');
+      expect(t).not.toContain('Bazada javobi yo\'q savolga');
+      return { messages: ["Sizga individual format: 50 kun, 800 000 so'm", 'Boshlaymizmi?'], action: 'ASK_NEXT', sales_step: 2 };
+    });
+    await engine.handleClientMessage(clientMsg(95, 'Kurs: 180 95 25, hammasi'));
+    expect(gateway.textsTo(95).at(-2)).toContain('800 000');
+
+    // model says "here are the details" but forgets the card → backend appends the exact admin text
+    llm.push((req) => {
+      expect(req.parts.at(-1)!.text).toContain('DARHOL to\'lov ma\'lumotini ber');
+      return { messages: ["Zo'r! To'lov ma'lumoti:"], action: 'ASK_NEXT', sales_step: 3 };
+    });
+    await engine.handleClientMessage(clientMsg(95, 'Ha boshlaymiz, qanday to\'layman?'));
+    expect(gateway.textsTo(95).at(-1)).toBe("Karta: 8600 1234 5678 9012\nTemur F.\nTo'lovdan keyin chekni yuboring");
+    expect((await Lead.findOne({ chatId: 95 }))?.salesStep).toBe(3);
+
+    llm.push((req) => {
+      expect(req.parts.at(-1)!.text).toContain("To'lov ma'lumoti allaqachon berilgan");
+      return { messages: ['Rahmat! Tekshirib, guruh linkini yuboraman'], action: 'SOLD', reason: 'paid' };
+    });
+    await engine.handleClientMessage(clientMsg(95, '', { kind: 'photo', photo: { fileId: 'chek' } }));
+    const lead = await Lead.findOne({ chatId: 95 });
+    expect(lead?.readyReason).toBe('sold');
+    expect(gateway.admin.at(-1)?.html).toContain('SOTILDI');
+  });
+
+  it('a long discussion is pushed to closing after max_sales_turns', async () => {
+    const { engine, llm, settings } = buildApp();
+    await settings.set({ max_sales_turns: 2, price_list: '800 000' });
+    llm.push(done, { messages: ['Taklif 800 000', 'Boshlaymizmi?'], action: 'ASK_NEXT', sales_step: 2 });
+    await engine.handleClientMessage(clientMsg(96, 'Kurs: 180 95 25, hammasi'));
+    llm.push({ messages: ['Javob 1', 'Boshlaymizmi, aka?'], action: 'ASK_NEXT', sales_step: 2 });
+    await engine.handleClientMessage(clientMsg(96, 'Hmm, oylab koraman'));
+    llm.push((req) => {
+      expect(req.parts.at(-1)!.text).toContain("Suhbat cho'zildi");
+      return { messages: ["To'lov ma'lumotini yuboraymi?"], action: 'ASK_NEXT', sales_step: 2 };
+    });
+    await engine.handleClientMessage(clientMsg(96, 'Bilmadim'));
+  });
+
+  it('the admin is warned when no price is configured', async () => {
+    const { engine, gateway, llm, settings } = buildApp();
+    await settings.set({ course_info: 'Onlayn kurs' });
+    llm.push(done, { messages: ['Taklif', 'Boshlaymizmi?'], action: 'ASK_NEXT' });
+    await engine.handleClientMessage(clientMsg(97, 'Kurs: 180 95 25, hammasi'));
+    expect(gateway.admin.some((a) => a.html.includes('Kurs narxi kiritilmagan'))).toBe(true);
+  });
+});

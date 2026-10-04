@@ -500,6 +500,12 @@ export class ConversationEngine {
       await AdminEvent.create({ type: 'questionnaire_done', leadId: lead._id });
       logger.info({ leadId: String(lead._id) }, 'Questionnaire complete — sales stage');
       await this.deps.leads.sendCard(lead);
+      const priceKnown = /\d/.test((await this.deps.settings.get('price_list')) + (await this.deps.settings.get('course_info')));
+      if (!priceKnown) {
+        await this.deps.gateway
+          .notifyAdmins("⚠️ Kurs narxi kiritilmagan — AI narxni ayta olmaydi. Mini ilova → «Murabbiy haqida» → «Narxlar va tariflar» va «To'lov ma'lumoti» ni to'ldiring.")
+          .catch(() => undefined);
+      }
       return this.salesTurn(lead, pending.map((m) => m.text), photoIds, outLang, async () => undefined);
     }
     if (after === 6) {
@@ -569,6 +575,7 @@ export class ConversationEngine {
     photoIds: string[] = [],
     coachMode = false,
     salesMode = false,
+    salesDirective = '',
   ): Promise<AiResponse> {
     const s = this.deps.settings;
     const historyLimit = await s.num('history_messages');
@@ -609,6 +616,9 @@ export class ConversationEngine {
       coachMode,
       salesMode,
       salesPrompt: salesMode ? fillTemplate(await s.get('sales_prompt'), { coach_name: await s.get('coach_name') }) : undefined,
+      salesDirective,
+      priceList: salesMode ? await s.get('price_list') : undefined,
+      paymentDetails: salesMode ? await s.get('payment_details') : undefined,
       allowAdvice: await s.bool('allow_advice'),
       photos: photoIds.length,
       lastAiMessages: (await this.recentAiTexts(lead, 3)).reverse(),
@@ -674,9 +684,12 @@ export class ConversationEngine {
   /** Sales stage: the AI presents the course, handles objections and closes; then the coach sends the group link. */
   private async salesTurn(lead: LeadDoc, newMessages: string[], photoIds: string[], lang: Lang, markProcessed: () => Promise<void>): Promise<void> {
     const s = this.deps.settings;
+    const step = lead.salesStep ?? 0;
+    const turns = lead.salesTurns ?? 0;
+    const directive = await this.salesDirective(step, turns);
     let ai: AiResponse;
     try {
-      ai = await this.askAi(lead, plainAnswers(lead), 6, lead.bmi ?? undefined, lang, newMessages, 6, photoIds, false, true);
+      ai = await this.askAi(lead, plainAnswers(lead), 6, lead.bmi ?? undefined, lang, newMessages, 6, photoIds, false, true, directive);
     } catch (err) {
       await this.onAiFailure(lead, err as Error);
       return;
@@ -700,10 +713,34 @@ export class ConversationEngine {
     if (ai.action === 'READY') return this.finishReady(lead, 'wants_coach', false, out.length ? out.slice(0, 2) : [await s.text('ready_message', outLang)]);
     if (ai.action === 'SOLD') return this.finishReady(lead, 'sold', false, out.length ? out.slice(0, 2) : [await s.text('ready_message', outLang)]);
     if (ai.action === 'REFUSED') return this.finishReady(lead, 'refused', false, out.slice(0, 2));
+    if (ai.action === 'NO_RESPONSE' || !out.length) {
+      await lead.save();
+      return;
+    }
+    // the payment details are sent exactly as the admin wrote them (never retyped by the model)
+    const payment = (await s.get('payment_details')).trim();
+    const reachedPayment = (ai.sales_step ?? 0) >= 3;
+    if (reachedPayment && payment && step < 3 && !containsPayment(out.join('\n'), payment)) out.push(payment);
+    lead.salesStep = Math.max(step, Math.min(3, ai.sales_step ?? step));
+    lead.salesTurns = turns + 1;
     await lead.save();
-    if (ai.action === 'NO_RESPONSE' || !out.length) return;
-    await this.sendToClient(lead, out.slice(0, 3));
+    await this.sendToClient(lead, out.slice(0, 4));
     void this.maybeSummarize(lead).catch(() => undefined);
+  }
+
+  /** Tells the model where the sale is and what the next concrete step must be, so it always moves towards payment. */
+  private async salesDirective(step: number, turns: number): Promise<string> {
+    const max = await this.deps.settings.num('max_sales_turns');
+    if (step >= 3) {
+      return "To'lov ma'lumoti allaqachon berilgan. Mijoz «to'ladim» desa yoki chek/skrinshot yuborsa → action=SOLD, reason=paid. Savoli bo'lsa qisqa javob ber va chekni yuborishini eslat. To'lov ma'lumotini mijoz so'ramasa qayta yuborma.";
+    }
+    if (turns >= max) {
+      return "Suhbat cho'zildi. Endi to'g'ridan-to'g'ri yopish: mijoz rozi bo'lsa yoki ikkilanmasa — to'lov ma'lumotini ber (sales_step=3) va chek so'ra; aks holda bitta aniq savol: «To'lov ma'lumotini yuboraymi?»";
+    }
+    if (step === 0) {
+      return "Bu javobda: mijozning maqsadi va muammosiga bog'lab qisqa shaxsiy taklif + ANIQ NARX (va nima kiradi) + bitta yopish savoli («Qaysi format sizga mos?» yoki «Boshlaymizmi?»). Narxni keyinga qoldirma.";
+    }
+    return "Mijoz rozi bo'lsa yoki qanday to'lashni so'rasa — DARHOL to'lov ma'lumotini ber (sales_step=3) va chek yuborishini so'ra. E'tiroz bo'lsa — 1–2 gap bilan javob (natijadan misol), keyin yana yopish savoli. Har javob aniq harakatga chaqiruv bilan tugasin, umumiy gap bilan cho'zma.";
   }
 
   /** After the questionnaire, for "always on" clients: free conversation as the coach's assistant. */
@@ -853,10 +890,10 @@ export class ConversationEngine {
     await Lead.updateOne(
       { _id: lead._id },
       {
-        $set: { answers: {}, status: 'NEW', mode: 'AI', urgent: false, remindersSent: 0, aiFailures: 0, askCount: 0, skippedSteps: [], currentQuestion: 1, adminCardMessageIds: [] },
+        $set: { answers: {}, status: 'NEW', mode: 'AI', urgent: false, remindersSent: 0, aiFailures: 0, askCount: 0, skippedSteps: [], currentQuestion: 1, adminCardMessageIds: [], salesStep: 0, salesTurns: 0 },
         $unset: {
           intent: '', bmi: '', targetBmi: '', readyReason: '', summary: '', summaryMessageCount: '', lastAskedStep: '', pendingSince: '',
-          lastClientMessageAt: '', lastOutgoingAt: '', readyAt: '', answeredAt: '', paidAt: '', rejectedAt: '', aiFailureNotifiedAt: '',
+          lastClientMessageAt: '', lastOutgoingAt: '', readyAt: '', answeredAt: '', paidAt: '', rejectedAt: '', aiFailureNotifiedAt: '', questionnaireDoneAt: '', soldAt: '',
         },
       },
     );
@@ -889,6 +926,13 @@ export function plainAnswers(lead: { answers?: unknown }): LeadAnswers {
   const a = lead.answers as { toObject?: () => Record<string, unknown> } | Record<string, unknown> | undefined;
   const obj = (a && typeof (a as { toObject?: unknown }).toObject === 'function' ? (a as { toObject: () => Record<string, unknown> }).toObject() : (a ?? {})) as Record<string, unknown>;
   return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== null && v !== undefined)) as LeadAnswers;
+}
+
+/** True when the message already contains the payment details (card number or the first line). */
+function containsPayment(text: string, payment: string): boolean {
+  const digits = payment.replace(/\s+/g, '').match(/\d{8,}/)?.[0];
+  if (digits) return text.replace(/\s+/g, '').includes(digits);
+  return normalize(text).includes(normalize(payment.split('\n')[0]).slice(0, 40));
 }
 
 const isBareAck = (m: string) => /^(tushunarli|tushundim|aha|zo'r|yaxshi|hop|ok|понятно|ясно|хорошо|ага)[.!]?$/i.test(m.trim());

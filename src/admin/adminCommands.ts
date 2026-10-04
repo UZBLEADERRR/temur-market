@@ -81,6 +81,9 @@ export function registerAdminHandlers(bot: Bot, app: AppContext): void {
     } catch (err) {
       lines.push(`Gemini: ❌ <code>${escapeHtml((err as Error).message.slice(0, 200))}</code>`);
     }
+    const priceList = await app.settings.get('price_list');
+    const payment = await app.settings.get('payment_details');
+    lines.push(`Sotuv: ${(await app.settings.bool('sales_mode')) ? '✅ yoqilgan' : "⛔️ o'chiq"} · narxlar: ${priceList.trim() ? '✅' : /\d/.test(await app.settings.get('course_info')) ? "⚠️ faqat «Kurs haqida» da" : '❌ kiritilmagan'} · to'lov ma'lumoti: ${payment.trim() ? '✅' : '❌ kiritilmagan'}`);
     const blocked = await Lead.countDocuments({ readyReason: 'send_blocked' });
     const failing = await Lead.countDocuments({ aiFailures: { $gt: 0 } });
     lines.push(`Yuborib bo'lmagan chatlar: ${blocked} · AI xatosi bor chatlar: ${failing}`);

@@ -50,6 +50,9 @@ export interface PromptInput {
   coachMode?: boolean;
   salesMode?: boolean;
   salesPrompt?: string;
+  salesDirective?: string;
+  priceList?: string;
+  paymentDetails?: string;
   allowAdvice?: boolean;
   photos?: number;
   lastAiMessages: string[];
@@ -85,7 +88,15 @@ export function buildUserText(input: PromptInput): string {
     `QOLGAN SAVOLLAR (tartib bilan):\n${input.remainingQuestions.map((q) => `${q.step}. «${q.text}»`).join('\n')}`,
     input.intentPending ? "MAQSAD ANIQLANMAGAN: mijoz kurs bo'yicha yozyaptimi? intent ni aniqla (ozish, semirish, ozg'inlik, qomat, maslahat so'rash — bularning hammasi course)." : '',
     input.salesMode
-      ? `REJIM: SOTUV. Anketa savollarini berma.\n${input.salesPrompt ?? ''}\nActionlar: ASK_NEXT (sotuvni davom ettirish, question=null), SOLD, REFUSED, READY (reason=wants_coach), URGENT_READY, NO_RESPONSE.`
+      ? [
+          "REJIM: SOTUV. Anketa savollarini berma. Bu rejimda «faqat 5 ta savol» va «savollardan keyin aytaman» qoidalari AMAL QILMAYDI — narx va to'lovni aniq ayt.",
+          input.salesPrompt ?? '',
+          `NARXLAR: ${input.priceList || "(alohida kiritilmagan — BILIMLAR BAZASIdagi «Kurs haqida» dan ol)"}`,
+          `TO'LOV MA'LUMOTI: ${input.paymentDetails || "(kiritilmagan — mijoz rozi bo'lsa SOLD reason=agreed)"}`,
+          `KEYINGI QADAM: ${input.salesDirective ?? ''}`,
+          "sales_step: javobing qaysi bosqichga yetkazdi — 1 = taklif va ANIQ NARX aytildi, 2 = yopish savoli berildi («boshlaymizmi?»), 3 = to'lov ma'lumoti yuborildi.",
+          'Actionlar: ASK_NEXT (sotuvni davom ettirish, question=null), SOLD, REFUSED, READY (reason=wants_coach), URGENT_READY, NO_RESPONSE.',
+        ].join('\n')
       : '',
     input.coachMode
       ? "REJIM: anketa tugagan. Sen murabbiy yordamchisisan: mijoz savoliga javob ber, qo'llab-quvvatla, umumiy maslahat ber. Anketa savollarini berma. action=ASK_NEXT (question=null) yoki NO_RESPONSE."
@@ -93,7 +104,7 @@ export function buildUserText(input: PromptInput): string {
     `MASLAHAT: ${input.allowAdvice === false ? "ruxsat yo'q — maslahat so'ralsa, savollardan keyin o'zim aytaman de" : 'ruxsat bor (umumiy, qisqa)'}`,
     input.photos ? `Mijoz ${input.photos} ta rasm yubordi (ilova qilingan).` : '',
     `ROST JAVOB matni («botmisiz?» uchun): «${input.botAnswer}»`,
-    `Bazada javobi yo'q savolga: «${input.priceReply}»`,
+    input.salesMode ? '' : `Bazada javobi yo'q savolga: «${input.priceReply}»`,
     `TASDIQ SO'ZLARI: ${input.ackWords}`,
     input.lastAiMessages.length ? `OXIRGI JAVOBLARING (takrorlama): ${input.lastAiMessages.map((m) => `«${m}»`).join(' ')}` : '',
     input.summary ? `\n== OLDINGI SUHBAT XULOSASI ==\n${input.summary}` : '',

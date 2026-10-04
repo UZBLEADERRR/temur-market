@@ -70,6 +70,9 @@ const LeadSchema = new Schema(
     questionnaireDoneAt: Date,
     /** AI closed the sale (client paid / agreed) — the coach sends the group link. */
     soldAt: Date,
+    /** Sales funnel: 0 start, 1 offer+price given, 2 closing asked, 3 payment details sent. */
+    salesStep: { type: Number, default: 0 },
+    salesTurns: { type: Number, default: 0 },
     answeredAt: Date,
     paidAt: Date,
     rejectedAt: Date,
