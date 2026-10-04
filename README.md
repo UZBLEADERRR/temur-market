@@ -68,6 +68,16 @@ Bu oqim `sales_mode` sozlamasi yoqilganda ishlaydi (standart holatda yoqilgan).
 
 Sotuv bosqichidagi eslatma: "Qaror qildingizmi? Savollaringiz bo'lsa bemalol yozing".
 
+### Tabiiy sotuv
+
+- **Sotuv skripti "sotuvchi" emas, Temur ohangida.** Avval mijozning o'z so'zlari bilan uning holati qaytariladi ("demak, vaqt yetmagani uchun to'xtab qolgansiz"). Keyin unga mos yechim oddiy tilda aytiladi, narx ro'yxat qilib emas, gap ichida beriladi (kerak bo'lsa kunlikka bo'lib). Har xabar bitta yengil savol bilan tugaydi.
+- **E'tirozlar:** avval tan olinadi, keyin bitta kuchli dalil yoki o'quvchi natijasi keltiriladi. Bir e'tirozga ikki martadan ortiq qaytilmaydi. Soxta shoshilinchlik ("faqat bugun") yo'q.
+- **Bot/reklama iboralari taqiqlangan:** "Ajoyib savol", "Hurmatli mijoz", "Eksklyuziv imkoniyat" va hokazo. Ro'yxat va emoji to'lqini ham yo'q. Mijozga ba'zan ismi bilan murojaat qilinadi.
+- **Temurning haqiqiy sotuv namunalari.** Chat eksportidan narx, chegirma, tarif va e'tiroz haqidagi javoblar alohida **sotuv namunasi** sifatida olinadi. Raqamlar `[narx]` va `N` bilan yashiriladi. Bu namunalar faqat sotuv bosqichida ishlatiladi, narxlar esa doim "Narxlar" maydonidan olinadi.
+- **Odamdek vaqt:** javobdan oldin 1–2 soniya "o'qish" pauzasi bor, yozish tezligi ham har safar biroz farq qiladi.
+
+**Sotuv namunalarini olish uchun** eksportni qayta yuklang: `/examples_clear`, keyin `messages.html` ni botga qayta yuboring. Import javobida "sotuv namunalari: N" ko'rinadi.
+
 ### «O'ylab ko'raman», karta va sotuvdan keyin
 
 - **«O'ylab ko'raman», «keyinroq», «maslahatlashay» desa:** AI bosim qilmaydi. Nima ikkilantirayotganini yumshoq so'raydi (narx, vaqt, ishonch, oila) va aynan shunga javob beradi.

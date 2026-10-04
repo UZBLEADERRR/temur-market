@@ -247,7 +247,8 @@ export function registerAdminHandlers(bot: Bot, app: AppContext): void {
     const total = await StyleExample.countDocuments();
     const sample = await StyleExample.aggregate<{ client: string; coach: string[] }>([{ $sample: { size: 3 } }]);
     const s = sample.map((e) => `Mijoz: ${escapeHtml(truncate(e.client, 120))}\nMurabbiy: ${escapeHtml(e.coach.join(' / '))}`).join('\n\n');
-    await reply(ctx, `📚 Namunalar: ${total}\n\n${s}`);
+    const sales = await StyleExample.countDocuments({ kind: 'sales' });
+    await reply(ctx, `📚 Namunalar: ${total} (uslub: ${total - sales}, sotuv: ${sales})\n\n${s}`);
   });
   admin.command('examples_clear', async (ctx) => {
     const r = await StyleExample.deleteMany({});
@@ -303,9 +304,10 @@ export function registerAdminHandlers(bot: Bot, app: AppContext): void {
         coachName: await app.settings.get('coach_name'),
       });
       const total = await StyleExample.countDocuments();
+      const salesCount = await StyleExample.countDocuments({ kind: 'sales' });
       await reply(
         ctx,
-        `✅ Import: ${res.chats} chat, ${res.messages} xabar → ${res.examples} ta anonim namuna (jami ${total}).\nIsm, raqam, narx, sog'liq ma'lumotlari olib tashlandi.\n/style_rebuild — uslub profilini yangilash`,
+        `✅ Import: ${res.chats} chat, ${res.messages} xabar → ${res.examples} ta anonim namuna (jami ${total}, shundan sotuv namunalari: ${salesCount}).\nIsm, raqam, narx, sog'liq ma'lumotlari olib tashlandi.\n/style_rebuild — uslub profilini yangilash`,
       );
     } catch (err) {
       logger.error({ err: (err as Error).message }, 'Import failed');

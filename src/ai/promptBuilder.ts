@@ -19,6 +19,9 @@ Faqat JSON qaytar, boshqa hech narsa yozma:
 - SPAM: ko'p rasm, stiker, reklama, havola yoki mavzuga aloqasiz xabarlarga chalg'ima — ularni e'tiborsiz qoldir va anketani davom ettir; faqat stiker/emoji bo'lsa NO_RESPONSE.
 - MASLAHAT: ruxsat berilgan bo'lsa, haqiqiy murabbiydek qisqa umumiy maslahat ber (1–3 gap: mashg'ulot muntazamligi, oqsil, uyqu, suv, yurish, sabr). Shaxsiy ratsion/dastur, kaloriya raqamlari, dori, tibbiy tashxis — yo'q: «shaxsiy dasturni kurs ichida tuzib beraman» de.
 - MURABBIY XABARLARI: tarixda «(O'ZI yozgan)» deb belgilangan xabarlarni murabbiyning o'zi yozgan. Ular ustun: aytgan narxi, chegirmasi, va'dasi va ko'rsatmasiga amal qil, ularga zid gapirma, takrorlama; u savol bergan bo'lsa va mijoz javob bergan bo'lsa — suhbatni shu yerdan tabiiy davom ettir.
+- TABIIY BO'L: real odam Telegram'da qanday yozsa shunday — qisqa, oddiy so'zlar, ba'zan bitta so'zli javob ham bo'ladi. Ro'yxat, raqamlangan punktlar, sarlavha, «!!!», har xabarda emoji — yo'q. Mijozning o'z so'zlarini qaytarib ishlat.
+- ISHLATMA (bot/reklama ohangi): «Ajoyib savol», «Sizga yordam berishdan mamnunman», «Hurmatli mijoz», «Albatta!» bilan har xabarni boshlash, «Biz sizga taklif qilamiz», «Eksklyuziv imkoniyat», «Shoshiling!», «Sizning muvaffaqiyatingiz — bizning maqsadimiz».
+- NAMUNALARda «[narx]» va «N» — yashirilgan raqamlar: ulardan faqat uslub va sotish usulini ol, narxni har doim NARXLAR / BILIMLAR BAZASIdan ayt.
 - PAUSE: mijoz "keyinroq yozaman" desa → bitta juda qisqa javob (masalan «Hop»), savol berma.
 - NO_RESPONSE: xabar javob talab qilmaydi (stiker, "ok" va savol allaqachon berilgan) → messages: [].
 - extracted: faqat mijoz shu suhbatda aniq aytgan ma'lumot, aks holda null. Raqamlar raqam bo'lsin (bo'y sm, vazn kg). goal — qisqa matn ("ozish 85 kg gacha"). trainingLocation: "zal" yoki "uy". healthProblems: muammo bo'lmasa "yo'q".
@@ -52,6 +55,7 @@ export interface PromptInput {
   salesPrompt?: string;
   salesDirective?: string;
   nowLocal?: string;
+  clientName?: string;
   soldContext?: boolean;
   priceList?: string;
   paymentDetails?: string;
@@ -82,6 +86,7 @@ export function buildUserText(input: PromptInput): string {
   return [
     '== MIJOZ HOLATI (kod hisoblagan) ==',
     `Mijoz tili: ${input.lang === 'ru' ? 'rus' : "o'zbek lotin"}`,
+    input.clientName ? `Mijoz ismi (Telegram): ${input.clientName} — ba'zan, tabiiy joyda ism bilan murojaat qil (har xabarda emas; ism g'alati yoki taxallus bo'lsa ishlatma).` : '',
     `Ma'lum javoblar: ${JSON.stringify(known)}`,
     `TMI: ${input.bmi ?? "noma'lum"}`,
     `Oxirgi berilgan savol: ${input.askedStep}/5 (answered_current shu savol haqida)`,

@@ -140,8 +140,10 @@ Ozish, Mijoz deb chaqiring
     expect(chat.messages).toHaveLength(6);
     expect(identifyCoach(chat, {})).toContain('Coach');
     const pairs = buildPairs(chat, { coachName: 'Temur' });
-    expect(pairs).toHaveLength(1); // the price reply is dropped
+    // a bare number reply without selling context is not kept
+    expect(pairs).toHaveLength(1);
     expect(pairs[0].coach).toEqual(['Tushunarli', 'Maqsad nima?']);
+    expect(pairs[0].kind).toBe('style');
     expect(pairs[0].client).not.toMatch(/173|75|Mijoz/);
   });
 
@@ -205,5 +207,20 @@ describe('greeting detection and turkish letters', async () => {
     expect(isGreetingOnly('Привет')).toBe(true);
     expect(isGreetingOnly('Salom, ozmoqchiman')).toBe(false);
     expect(normalize('ozğin')).toBe("ozg'in");
+  });
+});
+
+describe('sales example classification', async () => {
+  const { classifyCoachReply, maskSalesNumbers } = await import('../src/style/anonymizer');
+  it('keeps selling lines (numbers masked), drops diet plans and contacts', () => {
+    expect(classifyCoachReply('Kuniga chaqsangiz ham 16,000dan tushadi holos aka')).toBe('sales');
+    expect(maskSalesNumbers('Kuniga chaqsangiz ham 16,000dan tushadi holos aka')).toBe('Kuniga chaqsangiz ham [narx]dan tushadi holos aka');
+    expect(maskSalesNumbers('Men siz bn 50kun ishlab natijaga chiqaraman')).toBe('Men siz bn Nkun ishlab natijaga chiqaraman');
+    expect(classifyCoachReply("Men hechkimni tanasiga garantiya bermayman aka")).toBe('sales');
+    expect(classifyCoachReply('Avsyanka – 40g, tuxum 5 dona')).toBe('drop');
+    expect(classifyCoachReply('Karta: [karta]')).toBe('drop');
+    expect(classifyCoachReply('Ha boldi aka')).toBe('style');
+    expect(classifyCoachReply('-1kg yomon emas')).toBe('numeric');
+    expect(classifyCoachReply('1. a\n2. b\n3. c\n4. d\n5. e\n6. f')).toBe('drop');
   });
 });

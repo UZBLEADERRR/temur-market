@@ -596,7 +596,7 @@ export class ConversationEngine {
       remaining.push({ step: i, text: firstContact ? await s.text('first_message', lang) : await questionText(i as QuestionStep, lang, bmi, s) });
     }
     const queryForExamples = `${newMessages.join(' ')} ${remaining[0]?.text ?? ''}`;
-    const examples = await retrieveExamples(queryForExamples, lang, await s.num('examples_per_request'), lead.telegramId % 1000);
+    const examples = await retrieveExamples(queryForExamples, lang, await s.num('examples_per_request'), lead.telegramId % 1000, { sales: salesMode });
     const input = {
       systemPrompt: await s.get('system_prompt'),
       coachName: await s.get('coach_name'),
@@ -622,6 +622,7 @@ export class ConversationEngine {
       salesPrompt: salesMode ? fillTemplate(await s.get('sales_prompt'), { coach_name: await s.get('coach_name') }) : undefined,
       salesDirective,
       nowLocal: formatLocal(this.now(), this.tz()),
+      clientName: lead.firstName ?? undefined,
       soldContext: lead.readyReason === 'sold',
       priceList: salesMode ? await s.get('price_list') : undefined,
       paymentDetails: salesMode ? await s.get('payment_details') : undefined,
@@ -797,7 +798,7 @@ export class ConversationEngine {
       return "Suhbat cho'zildi. Endi to'g'ridan-to'g'ri yopish: mijoz rozi bo'lsa yoki ikkilanmasa — to'lov ma'lumotini ber (sales_step=3) va chek so'ra; aks holda bitta aniq savol: «To'lov ma'lumotini yuboraymi?»";
     }
     if (step === 0) {
-      return "Bu javobda: mijozning maqsadi va muammosiga bog'lab qisqa shaxsiy taklif + ANIQ NARX (va nima kiradi) + bitta yopish savoli («Qaysi format sizga mos?» yoki «Boshlaymizmi?»). Narxni keyinga qoldirma.";
+      return "Anketadan sotuvga tabiiy o'tish: avval mijozning o'z so'zlari bilan uning holatini qisqa qaytar (maqsadi, oldin nima xalaqit bergani) — u tushunilganini his qilsin. Keyin unga qanday yordam berishingni 1–2 gapda ayt va mos formatni narxi bilan oddiy gapda ayt (ro'yxat emas). Oxirida bitta yengil savol: «Sizga shu format to'g'ri keladimi?» yoki «Boshlaymizmi?». 2–3 ta qisqa xabar, reklama ohangi yo'q.";
     }
     return "Mijoz rozi bo'lsa yoki qanday to'lashni so'rasa — DARHOL to'lov ma'lumotini ber (sales_step=3) va chek yuborishini so'ra. E'tiroz bo'lsa — 1–2 gap bilan javob (natijadan misol), keyin yana yopish savoli. Har javob aniq harakatga chaqiruv bilan tugasin, umumiy gap bilan cho'zma.";
   }
@@ -904,9 +905,13 @@ export class ConversationEngine {
   }
 
   private async typing(lead: LeadDoc, text: string): Promise<void> {
+    if (!this.opts.fastTyping) {
+      // a person reads the message first, then starts typing
+      await sleep(700 + Math.random() * 1500);
+    }
     await this.deps.gateway.sendTyping(lead.businessConnectionId, lead.chatId).catch(() => undefined);
     if (this.opts.fastTyping) return;
-    const perChar = await this.deps.settings.num('typing_ms_per_char');
+    const perChar = (await this.deps.settings.num('typing_ms_per_char')) * (0.75 + Math.random() * 0.5);
     const max = await this.deps.settings.num('typing_max_ms');
     const ms = Math.min(max, 800 + text.length * perChar);
     // Telegram shows "typing" for ~5s; refresh for long delays

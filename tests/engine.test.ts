@@ -667,7 +667,7 @@ describe('sales funnel goes all the way to payment', () => {
     llm.push(done);
     llm.push((req) => {
       const t = req.parts.at(-1)!.text!;
-      expect(t).toContain('KEYINGI QADAM: Bu javobda');
+      expect(t).toContain("KEYINGI QADAM: Anketadan sotuvga tabiiy o'tish");
       expect(t).toContain("NARXLAR: Individual 50 kun — 800 000 so'm");
       expect(t).toContain('«savollardan keyin aytaman» qoidalari AMAL QILMAYDI');
       expect(t).not.toContain('Bazada javobi yo\'q savolga');
@@ -816,5 +816,28 @@ describe("«o'ylab ko'raman», card from course info, AI after sale", () => {
     expect(lead?.status).toBe('READY');
     expect(lead?.mode).toBe('MANUAL');
     expect(gateway.admin.at(-1)?.html).toContain('YANGI LEAD');
+  });
+});
+
+describe('natural selling', () => {
+  it('sales stage uses Temur\'s real sales examples and the client name; questionnaire does not', async () => {
+    const { StyleExample } = await import('../src/database/models/misc');
+    await StyleExample.create([
+      { client: 'Qimmat ekan', coach: ['Kuniga chaqsangiz ham [narx]dan tushadi holos aka'], kind: 'sales', tokens: ['qimma'] },
+      { client: 'Salom', coach: ['Va alaykum assalom'], kind: 'style', tokens: ['salom'] },
+    ]);
+    const { engine, llm } = buildApp();
+    llm.push((req) => {
+      expect(req.system).not.toContain('[narx]dan tushadi');
+      return { messages: ['Rahmat!'], action: 'READY', reason: 'completed', answered_current: true, extracted: { trainingExperience: '1 yil', goal: 'ozish', trainingDays: 4, trainingLocation: 'zal', previousAttempts: 'vaqt', healthProblems: "yo'q" } };
+    });
+    llm.push((req) => {
+      expect(req.system).toContain('[narx]dan tushadi holos aka');
+      expect(req.parts.at(-1)!.text).toContain('Mijoz ismi (Telegram): Ali');
+      expect(req.parts.at(-1)!.text).toContain("mijozning o'z so'zlari bilan");
+      expect(req.parts.at(-1)!.text).toContain('ISHLATMA');
+      return { messages: ['Demak vaqt yetmagani uchun to\'xtab qolgansiz', 'Boshlaymizmi?'], action: 'ASK_NEXT', sales_step: 2 };
+    });
+    await engine.handleClientMessage(clientMsg(103, 'Kurs: 180 95 25, hammasi'));
   });
 });
