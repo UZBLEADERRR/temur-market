@@ -554,3 +554,34 @@ describe('intent, photos, spam, always-on, reset', () => {
     expect(gateway.textsTo(87).at(-1)).toBe(FIRST);
   });
 });
+
+describe('no double first message (screenshot: «Kurs»)', () => {
+  it('model greets and asks Q1 without "?" → sent once, no extra fixed first message', async () => {
+    const { engine, gateway, llm } = buildApp();
+    llm.push({
+      messages: ['Assalomu alaykum', 'Ozingiz haqingizda qisqacha yozvoring: boy, ves, yosh va trenirovka tajribasi bormi'],
+      action: 'ASK_NEXT',
+      question: 1,
+    });
+    await engine.handleClientMessage(clientMsg(110, 'Kurs'));
+    expect(gateway.textsTo(110)).toEqual(['Assalomu alaykum', 'Ozingiz haqingizda qisqacha yozvoring: boy, ves, yosh va trenirovka tajribasi bormi']);
+  });
+
+  it('same without the question number from the model → still recognised as a question', async () => {
+    const { engine, gateway, llm } = buildApp();
+    llm.push({ messages: ['Assalomu alaykum', "Bo'y, ves, yosh, tajriba bormi"], action: 'ASK_NEXT' });
+    await engine.handleClientMessage(clientMsg(111, 'Kurs'));
+    expect(gateway.textsTo(111)).toHaveLength(2);
+  });
+
+  it('model only greets → greeting + question 1 without a second «Assalomu alaykum»', async () => {
+    const { engine, gateway, llm } = buildApp();
+    llm.push({ messages: ['Assalomu alaykum'], action: 'ASK_NEXT' });
+    await engine.handleClientMessage(clientMsg(112, 'Kurs'));
+    const texts = gateway.textsTo(112);
+    expect(texts[0]).toBe('Assalomu alaykum');
+    expect(texts[1]).not.toMatch(/assalomu/i);
+    expect(texts[1]).toContain("Bo'y, ves, yosh");
+    expect(texts).toHaveLength(2);
+  });
+});
