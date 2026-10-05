@@ -545,11 +545,16 @@ export class ConversationEngine {
     const askedWrong = ai.question !== null && ai.question !== undefined && ai.question !== after;
     const alreadyAsked = lead.lastAskedStep === after;
     let out = messages;
-    if (askedWrong || bandChanged || (!alreadyAsked && !out.some((m) => m.includes('?')))) {
+    // the model says which question it asked; people often drop the "?" so the text alone is not enough
+    const modelAsked = ai.question === after || out.some(looksLikeQuestion);
+    if (askedWrong || bandChanged || (!alreadyAsked && !modelAsked)) {
       // keep the model's side answer, then ask the expected question with a fresh acknowledgement
-      const side = out.filter((m) => !m.includes('?') && !isBareAck(m));
+      const side = out.filter((m) => !looksLikeQuestion(m) && !isBareAck(m));
+      const greeted = side.some(isGreeting);
+      // never greet twice: after the model's own greeting use question 1 without «Assalomu alaykum»
+      const question = greeted && after === 1 ? await this.deps.settings.text('q1', outLang) : canonical;
       const ack = side.length || recentAi.length === 0 ? '' : pickAck(await this.deps.settings.text('ack_words', outLang), recentAi, (lead.askCount ?? 0) + after + recentAi.length);
-      out = [...side.slice(0, 2), ack ? `${ack}. ${canonical}` : canonical];
+      out = [...side.slice(0, 2), ack ? `${ack}. ${question}` : question];
     }
     // never send the exact same text twice in a row
     const seen = new Set(recentAi.map((m) => normalize(m)));
@@ -558,7 +563,7 @@ export class ConversationEngine {
       await lead.save();
       return;
     }
-    const asksNow = out.some((m) => m.includes('?'));
+    const asksNow = modelAsked || out.some(looksLikeQuestion);
     if (asksNow) {
       lead.askCount = lead.lastAskedStep === after ? (lead.askCount ?? 0) + 1 : 1;
       lead.lastAskedStep = after;
@@ -1010,6 +1015,15 @@ function containsPayment(text: string, payment: string): boolean {
   if (digits) return text.replace(/\s+/g, '').includes(digits);
   return normalize(text).includes(normalize(payment.split('\n')[0]).slice(0, 40));
 }
+
+/** A question even without "?" — Uzbek/Russian question particles at the end ("tajriba bormi", "nechida"). */
+export function looksLikeQuestion(text: string): boolean {
+  const t = normalize(text).replace(/[.!…\s]+$/u, '');
+  if (t.includes('?')) return true;
+  return /(mi|mu|bormi|yo'qmi|qancha|nechta|nechi|nechida|qanaqa|qanday|qayerda|qachon|nima|nimaga|ли|сколько|какой|какая|когда|где|почему|зачем)$/u.test(t);
+}
+
+const isGreeting = (m: string) => /^(assalomu alaykum|assalom|salom|va alaykum|здравствуйте|привет|добрый)/i.test(normalize(m));
 
 const isBareAck = (m: string) => /^(tushunarli|tushundim|aha|zo'r|yaxshi|hop|ok|понятно|ясно|хорошо|ага)[.!]?$/i.test(m.trim());
 
