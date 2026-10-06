@@ -73,6 +73,14 @@ Boshqa chet eldagilar uchun: 1,200,000 so'm
     'И последний вопрос: почему решили взяться именно сейчас? Если начнём сейчас — готовы серьёзно включиться?',
   ),
   { key: 'ask_commitment', label: "Taklifdan oldin «nega aynan hozir?» savolini berish", group: 'Xulq', type: 'boolean', default: true },
+  {
+    key: 'results_keywords',
+    label: "Natija so'ralganini bildiruvchi so'zlar",
+    group: 'Kalit so\'zlar',
+    type: 'longtext',
+    default:
+      "natija, natijalar, natijasi, otziv, otzif, otzivlar, isbot, oldin keyin, oldin-keyin, kim ozgan, ozganlar, ishonmayman, ishonsa bo'ladimi, haqiqatdan, результат, отзыв, до и после, кто похудел, доказ",
+  },
   { key: 'max_messages_per_turn', label: 'Bir javobda maksimum xabar soni (ko\'p xabar ishonchsiz ko\'rinadi)', group: 'Xulq', type: 'number', default: 2 },
   { key: 'max_sales_turns', label: "Sotuvda nechta javobdan keyin to'lovga aniq taklif qilinsin", group: 'Xulq', type: 'number', default: 4 },
   {
@@ -82,6 +90,19 @@ Boshqa chet eldagilar uchun: 1,200,000 so'm
     type: 'longtext',
     default: "100 ga yaqin odam shu tizimda yaxshi natija qilgan. Natija uchun ikki taraflama mas'uliyat: biz to'g'ri va ishlaydigan dastur beramiz, mijoz unga amal qiladi — shunda natija kuttirib qo'ymaydi.",
   },
+  {
+    key: 'results_link',
+    label: "Natijalar havolasi (kanal/post). Mijoz natija so'rasa yoki ishonmasa, bot shuni yuboradi",
+    group: 'Murabbiy',
+    type: 'text',
+    default: '',
+  },
+  ...q(
+    'results_link_text',
+    'Natijalar havolasi bilan yuboriladigan gap',
+    "O'quvchilarimiz natijalari shu yerda, ko'rib chiqing:",
+    'Результаты моих учеников здесь, посмотрите:',
+  ),
   {
     key: 'sales_prompt',
     label: 'Sotuv skripti (anketadan keyin AI shu bo\'yicha kursni sotadi)',

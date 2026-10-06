@@ -84,6 +84,8 @@ const LeadSchema = new Schema(
     commitmentAsked: { type: Boolean, default: false },
     /** How many times the client said a soft «no» during the sale (one save attempt before giving up). */
     refusalCount: { type: Number, default: 0 },
+    /** The results link was already sent to this client (never spam it). */
+    resultsLinkSent: { type: Boolean, default: false },
     sentVoiceIds: { type: [String], default: [] },
     answeredAt: Date,
     paidAt: Date,

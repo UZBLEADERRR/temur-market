@@ -600,6 +600,7 @@ export class ConversationEngine {
     await lead.save();
     const voice = await this.pickVoice(lead, ai.voice_id);
     out = await this.enforceCountryPricing(lead, out, outLang);
+    out = await this.ensureResultsLink(lead, out, newText, outLang);
     await this.sendToClient(lead, trimMessages(out, voice ? 1 : await this.deps.settings.num('max_messages_per_turn')));
     if (voice) await this.sendVoice(lead, voice);
     void this.maybeSummarize(lead).catch(() => undefined);
@@ -661,6 +662,8 @@ export class ConversationEngine {
       nowLocal: formatLocal(this.now(), this.tz()),
       clientName: lead.firstName ?? undefined,
       countryInfo: await this.countryInfo(lead, lang),
+      resultsLink: (await s.get('results_link')).trim() || undefined,
+      resultsLinkSent: Boolean(lead.resultsLinkSent),
       voices: (await VoiceClip.find({ enabled: true }).sort({ createdAt: 1 }).limit(30).lean()).filter((v) => clipFits(v.country, clientCountry(lead))).map((v) => ({
         id: String(v._id).slice(-6),
         title: v.title || 'ovozli xabar',
@@ -794,6 +797,7 @@ export class ConversationEngine {
       return;
     }
     out.splice(0, out.length, ...(await this.enforceCountryPricing(lead, out, outLang)));
+    out.splice(0, out.length, ...(await this.ensureResultsLink(lead, out, newMessages.join('\n'), outLang)));
     // the payment details are sent exactly as the admin wrote them (never retyped by the model)
     const payment = (await s.get('payment_details')).trim() || paymentFromInfo(`${await s.get('price_list')}\n${await s.get('course_info')}`);
     const reachedPayment = (ai.sales_step ?? 0) >= 3;
@@ -817,6 +821,32 @@ export class ConversationEngine {
     await this.sendToClient(lead, texts);
     if (voice) await this.sendVoice(lead, voice);
     void this.maybeSummarize(lead).catch(() => undefined);
+  }
+
+  /**
+   * The admin's results link (channel / post with before-after photos) is shown when the client asks about results
+   * or doubts them — at most once per client. If the model forgot it, it is added with a short line.
+   */
+  private async ensureResultsLink(lead: LeadDoc, out: string[], clientText: string, lang: Lang): Promise<string[]> {
+    const link = (await this.deps.settings.get('results_link')).trim();
+    if (!link) return out;
+    const has = out.some((m) => m.includes(link));
+    if (lead.resultsLinkSent) {
+      // never repeat it
+      return has ? out.map((m) => m.replace(link, '').trim()).filter(Boolean) : out;
+    }
+    const asked = Boolean(containsAny(clientText, splitKeywords(await this.deps.settings.get('results_keywords'))));
+    if (has) {
+      lead.resultsLinkSent = true;
+      await Lead.updateOne({ _id: lead._id }, { $set: { resultsLinkSent: true } });
+      return out;
+    }
+    if (!asked) return out;
+    lead.resultsLinkSent = true;
+    await Lead.updateOne({ _id: lead._id }, { $set: { resultsLinkSent: true } });
+    const line = `${await this.deps.settings.text('results_link_text', lang)} ${link}`.trim();
+    // the link goes right after the first message, before the closing question
+    return out.length ? [out[0], line, ...out.slice(1)] : [line];
   }
 
   /** Tells the model where the client lives and which currency to use (or to ask first). */
@@ -1113,7 +1143,7 @@ export class ConversationEngine {
     await Lead.updateOne(
       { _id: lead._id },
       {
-        $set: { answers: {}, status: 'NEW', mode: 'AI', urgent: false, remindersSent: 0, aiFailures: 0, askCount: 0, skippedSteps: [], currentQuestion: 1, adminCardMessageIds: [], salesStep: 0, salesTurns: 0, followUpsSent: 0, refusalCount: 0, commitmentAsked: false, sentVoiceIds: [] },
+        $set: { answers: {}, status: 'NEW', mode: 'AI', urgent: false, remindersSent: 0, aiFailures: 0, askCount: 0, skippedSteps: [], currentQuestion: 1, adminCardMessageIds: [], salesStep: 0, salesTurns: 0, followUpsSent: 0, refusalCount: 0, resultsLinkSent: false, commitmentAsked: false, sentVoiceIds: [] },
         $unset: {
           intent: '', bmi: '', targetBmi: '', readyReason: '', summary: '', summaryMessageCount: '', lastAskedStep: '', pendingSince: '',
           lastClientMessageAt: '', lastOutgoingAt: '', readyAt: '', answeredAt: '', paidAt: '', rejectedAt: '', aiFailureNotifiedAt: '', questionnaireDoneAt: '', soldAt: '', followUpAt: '', followUpNote: '',
@@ -1183,8 +1213,13 @@ const isGreeting = (m: string) => /^(assalomu alaykum|assalom|salom|va alaykum|�
 /** Trims to the per-turn limit but keeps the last message (usually the question that moves the chat on). */
 export function trimMessages(out: string[], limit: number): string[] {
   if (limit <= 0 || out.length <= limit) return out;
-  if (limit === 1) return [out.find(looksLikeQuestion) ?? out[0]];
-  return [...out.slice(0, limit - 1), out[out.length - 1]];
+  // a message with a link (results, payment page) is never dropped
+  const linked = out.filter((m) => /https?:\/\/|t\.me\//i.test(m));
+  const rest = out.filter((m) => !linked.includes(m));
+  let kept: string[];
+  if (limit === 1) kept = [rest.find(looksLikeQuestion) ?? rest[0]].filter(Boolean) as string[];
+  else kept = rest.length <= limit ? rest : [...rest.slice(0, limit - 1), rest[rest.length - 1]];
+  return out.filter((m) => linked.includes(m) || kept.includes(m));
 }
 
 /** Clear «stop» phrases: no save attempt, the client asked to stop. */

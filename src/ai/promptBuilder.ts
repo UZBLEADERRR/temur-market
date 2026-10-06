@@ -58,6 +58,8 @@ export interface PromptInput {
   nowLocal?: string;
   clientName?: string;
   countryInfo?: string;
+  resultsLink?: string;
+  resultsLinkSent?: boolean;
   voices?: Array<{ id: string; title: string; summary: string; sent: boolean }>;
   soldContext?: boolean;
   priceList?: string;
@@ -90,6 +92,11 @@ export function buildUserText(input: PromptInput): string {
     '== MIJOZ HOLATI (kod hisoblagan) ==',
     `Mijoz tili: ${input.lang === 'ru' ? 'rus' : "o'zbek lotin"}`,
     input.countryInfo ? `MIJOZ DAVLATI: ${input.countryInfo}` : '',
+    input.resultsLink
+      ? input.resultsLinkSent
+        ? `NATIJALAR HAVOLASI allaqachon yuborilgan (${input.resultsLink}) — qayta yuborma, kerak bo'lsa «yuqorida tashlagan edim» de.`
+        : `NATIJALAR HAVOLASI: ${input.resultsLink} — mijoz natija, otziv, isbot so'rasa yoki ishonmasa, shu havolani xabaringga qo'sh (1 qisqa gap + havola). Havolani o'zgartirma.`
+      : '',
     input.clientName ? `Mijoz ismi (Telegram): ${input.clientName} — ba'zan, tabiiy joyda ism bilan murojaat qil (har xabarda emas; ism g'alati yoki taxallus bo'lsa ishlatma).` : '',
     `Ma'lum javoblar: ${JSON.stringify(known)}`,
     `TMI: ${input.bmi ?? "noma'lum"}`,

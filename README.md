@@ -29,6 +29,13 @@
   - Shartlar: to'lov oldindan; qoida buzilsa qaytarilmaydi.
   - **To'lov ma'lumoti** (karta) maydonini o'zingiz to'ldirasiz.
 
+### Natijalar havolasi
+
+- **Havolani kiritish:** mini ilova → "Murabbiy haqida" → **"Natijalar havolasi"**. Bu natijalar kanali yoki "oldin-keyin" posti bo'lishi mumkin.
+- **Qachon yuboriladi:** mijoz natija, otziv yoki isbot so'rasa yoki "ishonmayman" desa, bot qisqa gap bilan havolani yuboradi: "O'quvchilarimiz natijalari shu yerda, ko'rib chiqing: …". AI havolani o'zi qo'shmasa ham, kod qo'shib yuboradi.
+- **Takrorlanmaydi:** havola bitta mijozga bir marta ketadi. Qayta so'rasa, bot "yuqorida tashlagan edim" deydi.
+- **Sozlanadi:** gap matni (`results_link_text`) va "natija" kalit so'zlari (`results_keywords`) sozlamalarda o'zgartiriladi.
+
 ### Won va so'm: davlatga qarab narx
 
 - **Davlat aniqlanmaguncha narx aytilmaydi.** Bot mijozning qayerdaligini bilmasa, avval "Qayerdasiz, Koreyadamisiz yo O'zbekistonda?" deb so'raydi. Bu savol sozlamalarda o'zgartiriladi.

@@ -1098,3 +1098,40 @@ describe('bot2: won for Korea, so\'m for Uzbekistan', () => {
     expect(detectCountry('Москвада яшайман')).toBe('OTHER');
   });
 });
+
+describe('bot2: results link', () => {
+  it('client asks about results → the admin link is sent once with a short line; never repeated', async () => {
+    const { engine, gateway, llm, settings } = buildApp();
+    await settings.set({ results_link: 'https://t.me/temurfit_natijalar' });
+    await engine.handleClientMessage(clientMsg(150, 'Salom, kurs haqida'));
+    // the model forgets the link → backend adds it
+    llm.push((req) => {
+      expect(req.parts.at(-1)!.text).toContain('NATIJALAR HAVOLASI: https://t.me/temurfit_natijalar');
+      return { messages: ["Ha, ko'p odam natija qilgan", "Bo'y, ves, yosh, tajriba bormi?"], action: 'ASK_NEXT', question: 1 };
+    });
+    await engine.handleClientMessage(clientMsg(150, 'Natijalar bormi? Ishonmayman'));
+    const texts = gateway.textsTo(150);
+    expect(texts).toContain("O'quvchilarimiz natijalari shu yerda, ko'rib chiqing: https://t.me/temurfit_natijalar");
+    expect(texts.at(-1)).toContain('tajriba bormi');
+    expect((await Lead.findOne({ chatId: 150 }))?.resultsLinkSent).toBe(true);
+    // asked again → not repeated
+    llm.push((req) => {
+      expect(req.parts.at(-1)!.text).toContain('allaqachon yuborilgan');
+      return { messages: ['Yuqorida tashlagan edim. Yoshingiz nechida?'], action: 'ASK_NEXT', question: 1 };
+    });
+    await engine.handleClientMessage(clientMsg(150, 'Yana natija bormi?'));
+    expect(gateway.textsTo(150).filter((t) => t.includes('https://t.me/temurfit_natijalar'))).toHaveLength(1);
+  });
+
+  it('no link configured → nothing is added', async () => {
+    const { engine, gateway } = buildApp();
+    await engine.handleClientMessage(clientMsg(151, 'Salom, kurs haqida'));
+    await engine.handleClientMessage(clientMsg(151, 'Natijalar bormi?'));
+    expect(gateway.textsTo(151).some((t) => t.includes('http'))).toBe(false);
+  });
+
+  it('trimming to 2 messages never drops the link', async () => {
+    const { trimMessages } = await import('../src/conversations/engine');
+    expect(trimMessages(['a', 'Natijalar: https://t.me/x', 'b', 'Savol?'], 2)).toEqual(['a', 'Natijalar: https://t.me/x', 'Savol?']);
+  });
+});
