@@ -14,6 +14,7 @@ import { logger } from '../utils/logger';
 
 const HELP = `<b>TEMUR.FIT AI-yordamchi — admin</b>
 
+/app — mini ilova (mijozlar jadvali, sozlamalar, ovozlar)
 /status — tizim holati (Business ulanish, Gemini, xatolar)
 /navbat — javob kutayotgan mijozlar (eng eskisi birinchi)
 /stats — bugungi statistika (/stats 2026-10-01)
@@ -59,14 +60,28 @@ export function registerAdminHandlers(bot: Bot, app: AppContext): void {
   const reply = (ctx: Context, html: string, extra: Record<string, unknown> = {}) =>
     ctx.reply(html, { parse_mode: 'HTML', link_preview_options: { is_disabled: true }, ...extra });
 
-  admin.command(['start', 'help'], async (ctx) => {
-    const kb = app.env.publicUrl ? new InlineKeyboard().webApp('📋 Mini ilova', `${app.env.publicUrl}/app/`) : undefined;
-    await reply(ctx, HELP, kb ? { reply_markup: kb } : {});
-  });
+  /** Mini app access: inline button + the bottom-left menu button (set again on every /start). */
+  const sendAppButton = async (ctx: Context, withHelp: boolean) => {
+    if (!app.env.publicUrl) {
+      return reply(
+        ctx,
+        (withHelp ? HELP + '\n\n' : '') +
+          "⚠️ <b>Mini ilova hali ulanmagan.</b> Railway → servis → <b>Settings → Networking → Generate Domain</b> ni bosing (yoki <code>PUBLIC_URL</code> ni kiriting), keyin botni qayta deploy qiling va /start bosing.",
+      );
+    }
+    const url = `${app.env.publicUrl}/app/`;
+    await bot.api
+      .setChatMenuButton({ chat_id: ctx.chat!.id, menu_button: { type: 'web_app', text: 'Mijozlar', web_app: { url } } })
+      .catch((err) => logger.warn({ err: (err as Error).message }, 'setChatMenuButton failed'));
+    await reply(ctx, withHelp ? HELP : '📋 Mini ilova:', { reply_markup: new InlineKeyboard().webApp('📋 Mini ilovani ochish', url) });
+  };
+  admin.command(['start', 'help'], (ctx) => sendAppButton(ctx, true));
+  admin.command('app', (ctx) => sendAppButton(ctx, false));
 
   /** Diagnostics: Business connection rights, AI switch, LLM health, recent problems. */
   admin.command('status', async (ctx) => {
     const lines: string[] = ['🩺 <b>Holat</b>'];
+    lines.push(`Mini ilova: ${app.env.publicUrl ? `✅ ${escapeHtml(app.env.publicUrl)}/app/` : "❌ domen yo'q (Railway → Networking → Generate Domain)"}`);
     lines.push(`AI umumiy: ${(await app.settings.bool('ai_enabled')) ? '✅ yoqilgan' : '⛔️ o\'chirilgan (/ai_global_on)'}`);
     const conns = await BusinessConnection.find().lean();
     if (!conns.length) lines.push("Business ulanish: ❌ yo'q — Telegram Business → Chatbots'da botni ulang");
