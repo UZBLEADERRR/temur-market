@@ -1135,3 +1135,63 @@ describe('bot2: results link', () => {
     expect(trimMessages(['a', 'Natijalar: https://t.me/x', 'b', 'Savol?'], 2)).toEqual(['a', 'Natijalar: https://t.me/x', 'Savol?']);
   });
 });
+
+describe('bot2: payment by country and start info', () => {
+  const done = {
+    messages: ['Rahmat!'],
+    action: 'READY',
+    reason: 'completed',
+    answered_current: true,
+    extracted: { trainingExperience: '1 yil', goal: 'ozish', trainingDays: 3, trainingLocation: 'zal', previousAttempts: 'reja yo\'q', healthProblems: "yo'q" },
+  };
+  const KR = "Woori bank: 1002-063-833262\nEgasi: Temur F.\nSumma: 150,000 KRW";
+  const UZ = "Karta: 8600 1234 5678 9012\nTemur F.\nSumma: 1,000,000 so'm";
+  async function ready(chatId: number, first: string) {
+    const ctx = buildApp();
+    await ctx.settings.set({ ask_commitment: false, payment_details_kr: KR, payment_details_uz: UZ });
+    ctx.llm.push(done, { messages: ['Boshlaymizmi?'], action: 'ASK_NEXT', sales_step: 2 });
+    await ctx.engine.handleClientMessage(clientMsg(chatId, first));
+    return ctx;
+  }
+
+  it('Korea client gets the won account, Uzbekistan client gets the so\'m card — verbatim', async () => {
+    const a = await ready(160, 'Kurs: 175 82 24, hammasi. Koreadaman');
+    a.llm.push({ messages: ["Zo'r, to'lov ma'lumoti:"], action: 'ASK_NEXT', sales_step: 3 });
+    await a.engine.handleClientMessage(clientMsg(160, 'Boshlaymiz'));
+    expect(a.gateway.textsTo(160).at(-1)).toBe(KR);
+
+    const b = await ready(161, 'Kurs: 175 82 24, hammasi. Toshkentdaman');
+    b.llm.push({ messages: ["Zo'r, to'lov ma'lumoti:"], action: 'ASK_NEXT', sales_step: 3 });
+    await b.engine.handleClientMessage(clientMsg(161, 'Boshlaymiz'));
+    expect(b.gateway.textsTo(161).at(-1)).toBe(UZ);
+  });
+
+  it('country unknown at the payment step → asks the country, no card yet', async () => {
+    const c = await ready(162, 'Kurs: 175 82 24, hammasi');
+    c.llm.push({ messages: ["Zo'r, to'lov ma'lumoti:"], action: 'ASK_NEXT', sales_step: 3 });
+    await c.engine.handleClientMessage(clientMsg(162, 'Boshlaymiz'));
+    const texts = c.gateway.textsTo(162);
+    expect(texts.at(-1)).toBe("Qayerdasiz, Koreyadamisiz yo O'zbekistonda?");
+    expect(texts.some((t) => t.includes('8600') || t.includes('1002'))).toBe(false);
+    expect((await Lead.findOne({ chatId: 162 }))?.salesStep).toBeLessThan(3);
+    // then the client answers → the right card goes out
+    c.llm.push({ messages: ['Hop, mana:'], action: 'ASK_NEXT', sales_step: 3 });
+    await c.engine.handleClientMessage(clientMsg(162, 'Koreyadaman'));
+    expect(c.gateway.textsTo(162).at(-1)).toBe(KR);
+  });
+
+  it('«qachon boshlanadi» — the start info is in the knowledge base', async () => {
+    const { engine, llm } = buildApp();
+    await engine.handleClientMessage(clientMsg(163, 'Salom, kurs haqida'));
+    llm.push((req) => {
+      expect(req.system).toContain("QACHON BOSHLANADI / TO'LOVDAN KEYIN: To'lovdan keyin chekni va rasmlaringizni");
+      return { messages: ["To'lovdan keyin ratsion tuzib beraman, keyin boshlaysiz. Bo'y, ves, yosh?"], action: 'ASK_NEXT', question: 1 };
+    });
+    await engine.handleClientMessage(clientMsg(163, 'Qachondan boshlanadi?'));
+  });
+
+  it('bank account inside «Kurs haqida» is found as payment info', async () => {
+    const { paymentFromInfo } = await import('../src/conversations/engine');
+    expect(paymentFromInfo("Kurs 50 kun\nWoori bank hisob: 1002063833262\nEgasi: Temur")).toBe('Woori bank hisob: 1002063833262\nEgasi: Temur');
+  });
+});

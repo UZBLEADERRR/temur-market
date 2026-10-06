@@ -54,11 +54,40 @@ Boshqa chet eldagilar uchun: 1,200,000 so'm
 (50 kun uchun; kuniga taxminan Koreyada 3,000 won, O'zbekistonda 20,000 so'm)`,
   },
   {
-    key: 'payment_details',
-    label: "To'lov ma'lumoti (karta, kimning nomiga, qanday to'lash) — AI so'zma-so'z yuboradi",
+    key: 'payment_details_kr',
+    label: "🇰🇷 Koreya uchun to'lov (bank, hisob raqami, egasi, summa won) — so'zma-so'z yuboriladi",
     group: 'Murabbiy',
     type: 'longtext',
     default: '',
+  },
+  {
+    key: 'payment_details_uz',
+    label: "🇺🇿 O'zbekiston uchun to'lov (karta raqami, egasi, summa so'm) — so'zma-so'z yuboriladi",
+    group: 'Murabbiy',
+    type: 'longtext',
+    default: '',
+  },
+  {
+    key: 'payment_details_other',
+    label: "🌍 Boshqa chet el uchun to'lov (bo'sh bo'lsa O'zbekiston kartasi yuboriladi)",
+    group: 'Murabbiy',
+    type: 'longtext',
+    default: '',
+  },
+  {
+    key: 'payment_details',
+    label: "To'lov ma'lumoti (umumiy — davlatga xos maydon bo'sh bo'lsa ishlatiladi)",
+    group: 'Murabbiy',
+    type: 'longtext',
+    default: '',
+  },
+  {
+    key: 'start_info',
+    label: "Qachon boshlanadi (to'lovdan keyin nima bo'ladi, guruh qachon boshlanadi)",
+    group: 'Murabbiy',
+    type: 'longtext',
+    default:
+      "To'lovdan keyin chekni va rasmlaringizni (old, yon, orqa) hamda bo'y, vazn, maqsadni yuborasiz. Shundan keyin shaxsiy ratsion va trenirovka planini tuzib beraman, tayyor bo'lgach guruhga qo'shilib boshlaysiz.",
   },
   ...q(
     'country_question',

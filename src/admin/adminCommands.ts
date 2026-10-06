@@ -105,8 +105,9 @@ export function registerAdminHandlers(bot: Bot, app: AppContext): void {
       lines.push(`Gemini: ❌ <code>${escapeHtml((err as Error).message.slice(0, 200))}</code>`);
     }
     const priceList = await app.settings.get('price_list');
-    const payment = await app.settings.get('payment_details');
-    lines.push(`Sotuv: ${(await app.settings.bool('sales_mode')) ? '✅ yoqilgan' : "⛔️ o'chiq"} · narxlar: ${priceList.trim() ? '✅' : /\d/.test(await app.settings.get('course_info')) ? "⚠️ faqat «Kurs haqida» da" : '❌ kiritilmagan'} · to'lov ma'lumoti: ${payment.trim() ? '✅' : '❌ kiritilmagan'}`);
+    const has = async (k: string) => ((await app.settings.get(k)).trim() ? '✅' : '❌');
+    lines.push(`Sotuv: ${(await app.settings.bool('sales_mode')) ? '✅ yoqilgan' : "⛔️ o'chiq"} · narxlar: ${priceList.trim() ? '✅' : '❌ kiritilmagan'}`);
+    lines.push(`To'lov: 🇰🇷 ${await has('payment_details_kr')} · 🇺🇿 ${await has('payment_details_uz')} · 🌍 ${await has('payment_details_other')} · umumiy ${await has('payment_details')} · boshlanish: ${await has('start_info')}`);
     const blocked = await Lead.countDocuments({ readyReason: 'send_blocked' });
     const failing = await Lead.countDocuments({ aiFailures: { $gt: 0 } });
     lines.push(`Yuborib bo'lmagan chatlar: ${blocked} · AI xatosi bor chatlar: ${failing}`);

@@ -672,7 +672,8 @@ export class ConversationEngine {
       })),
       soldContext: lead.readyReason === 'sold',
       priceList: salesMode ? await s.get('price_list') : undefined,
-      paymentDetails: salesMode ? await s.get('payment_details') : undefined,
+      paymentDetails: salesMode ? await this.paymentInfoForPrompt(lead) : undefined,
+      startInfo: (await s.get('start_info')).trim() || undefined,
       allowAdvice: await s.bool('allow_advice'),
       photos: photoIds.length,
       lastAiMessages: (await this.recentAiTexts(lead, 3)).reverse(),
@@ -799,9 +800,17 @@ export class ConversationEngine {
     out.splice(0, out.length, ...(await this.enforceCountryPricing(lead, out, outLang)));
     out.splice(0, out.length, ...(await this.ensureResultsLink(lead, out, newMessages.join('\n'), outLang)));
     // the payment details are sent exactly as the admin wrote them (never retyped by the model)
-    const payment = (await s.get('payment_details')).trim() || paymentFromInfo(`${await s.get('price_list')}\n${await s.get('course_info')}`);
-    const reachedPayment = (ai.sales_step ?? 0) >= 3;
-    if (reachedPayment && payment && step < 3 && !containsPayment(out.join('\n'), payment)) out.push(payment);
+    const payment = await this.paymentFor(lead);
+    let reachedPayment = (ai.sales_step ?? 0) >= 3;
+    if (reachedPayment && payment === null) {
+      // card depends on the country (won account vs so'm card) and we do not know it yet → ask first
+      const q = await s.text('country_question', outLang);
+      if (!out.includes(q)) out.push(q);
+      reachedPayment = false;
+      ai.sales_step = Math.min(ai.sales_step ?? 2, 2);
+    } else if (reachedPayment && payment && step < 3 && !containsPayment(out.join('\n'), payment)) {
+      out.push(payment);
+    }
     if (ai.follow_up_at) await this.planFollowUp(lead, ai.follow_up_at, ai.follow_up_note ?? '');
     if (commitmentFirst) lead.commitmentAsked = true;
     const ex = sanitizeExtracted(ai.extracted ?? {});
@@ -847,6 +856,30 @@ export class ConversationEngine {
     const line = `${await this.deps.settings.text('results_link_text', lang)} ${link}`.trim();
     // the link goes right after the first message, before the closing question
     return out.length ? [out[0], line, ...out.slice(1)] : [line];
+  }
+
+  /**
+   * Payment details for this client: country-specific (Korea won account / Uzbekistan card / other) → general →
+   * card found in the course info. null = depends on the country, which is not known yet.
+   */
+  private async paymentFor(lead: LeadDoc): Promise<string | null> {
+    const s = this.deps.settings;
+    const byCountry = {
+      KR: (await s.get('payment_details_kr')).trim(),
+      UZ: (await s.get('payment_details_uz')).trim(),
+      OTHER: (await s.get('payment_details_other')).trim() || (await s.get('payment_details_uz')).trim(),
+    };
+    const general = (await s.get('payment_details')).trim() || paymentFromInfo(`${await s.get('price_list')}\n${await s.get('course_info')}`);
+    const code = clientCountry(lead);
+    if (code && byCountry[code]) return byCountry[code];
+    if (!code && (byCountry.KR || byCountry.UZ)) return null; // won account vs so'm card — ask the country first
+    return general;
+  }
+
+  private async paymentInfoForPrompt(lead: LeadDoc): Promise<string> {
+    const p = await this.paymentFor(lead);
+    if (p === null) return "davlatga bog'liq (Koreya — won hisob, O'zbekiston — so'm karta). Mijoz davlatini bilmasang, avval so'ra.";
+    return p;
   }
 
   /** Tells the model where the client lives and which currency to use (or to ask first). */
@@ -1185,7 +1218,7 @@ export function plainAnswers(lead: { answers?: unknown }): LeadAnswers {
 /** Card / payment lines found inside the course info (used when «To'lov ma'lumoti» is empty). */
 export function paymentFromInfo(info: string): string {
   const lines = info.split(/\r?\n/);
-  const idx = lines.findIndex((l) => /(?:\d[ -]?){16}/.test(l));
+  const idx = lines.findIndex((l) => /(?:\d[ -]?){16}/.test(l) || (/\d{10,}/.test(l.replace(/[\s-]/g, '')) && /karta|card|карта|hisob|bank|woori|woory|kb|shinhan|hana|nonghyup|toss|счёт|счет/i.test(l)));
   if (idx < 0) return '';
   // the card line plus an adjacent owner / instruction line when it looks related
   const around = [lines[idx - 1], lines[idx], lines[idx + 1]].filter(

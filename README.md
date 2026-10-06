@@ -29,6 +29,20 @@
   - Shartlar: to'lov oldindan; qoida buzilsa qaytarilmaydi.
   - **To'lov ma'lumoti** (karta) maydonini o'zingiz to'ldirasiz.
 
+### To'lov kartalari va boshlanish vaqti
+
+Mini ilova → "Murabbiy haqida" bo'limida to'lov ma'lumotini davlatga qarab alohida kiritasiz:
+- **🇰🇷 Koreya uchun to'lov:** bank, hisob raqami, egasi, summa won.
+- **🇺🇿 O'zbekiston uchun to'lov:** karta raqami, egasi, summa so'm.
+- **🌍 Boshqa chet el uchun to'lov:** bo'sh qolsa, O'zbekiston kartasi yuboriladi.
+- **Umumiy to'lov ma'lumoti:** davlatga xos maydon bo'sh bo'lsa ishlatiladi.
+
+Qanday ishlaydi:
+- **Mijoz rozi bo'lganda** bot uning davlatiga mos to'lov ma'lumotini **so'zma-so'z** yuboradi. Raqamni AI o'zi qayta yozmaydi, shuning uchun xato bo'lmaydi.
+- **Davlat noma'lum bo'lsa** karta yuborilmaydi. Avval "Koreyadamisiz yo O'zbekistonda?" deb so'raladi, javobdan keyin to'g'ri karta ketadi.
+- **"Qachon boshlanadi"** maydoni: to'lovdan keyin nima bo'lishi va guruh qachon boshlanishi. Mijoz "qachondan boshlaymiz?" desa, bot shu matn asosida javob beradi va sana to'qimaydi. Standart matn: to'lovdan keyin chek, rasmlar va o'lchamlar yuboriladi, ratsion tuzilgach guruhga qo'shiladi.
+- **`/status`** qaysi maydonlar to'ldirilganini ko'rsatadi: 🇰🇷 ✅/❌ · 🇺🇿 ✅/❌ · boshlanish ✅/❌.
+
 ### Natijalar havolasi
 
 - **Havolani kiritish:** mini ilova → "Murabbiy haqida" → **"Natijalar havolasi"**. Bu natijalar kanali yoki "oldin-keyin" posti bo'lishi mumkin.

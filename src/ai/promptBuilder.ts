@@ -64,6 +64,7 @@ export interface PromptInput {
   soldContext?: boolean;
   priceList?: string;
   paymentDetails?: string;
+  startInfo?: string;
   allowAdvice?: boolean;
   photos?: number;
   lastAiMessages: string[];
@@ -78,7 +79,7 @@ export function buildSystem(input: PromptInput): string {
     fillTemplate(input.systemPrompt, vars),
     `== USLUB PROFILI ==\n${input.styleProfile}`,
     input.examples.length ? `== ${input.coachName.toUpperCase()} NAMUNALARI (anonim) ==\n${formatExamples(input.examples, input.coachName)}` : '',
-    `== BILIMLAR BAZASI (faqat shu faktlar) ==\n${input.coachName} haqida: ${input.coachInfo}\nKurs haqida: ${input.courseInfo}\nO'QUVCHILAR NATIJALARI: ${input.results}`,
+    `== BILIMLAR BAZASI (faqat shu faktlar) ==\n${input.coachName} haqida: ${input.coachInfo}\nKurs haqida: ${input.courseInfo}\nO'QUVCHILAR NATIJALARI: ${input.results}${input.startInfo ? `\nQACHON BOSHLANADI / TO'LOVDAN KEYIN: ${input.startInfo}` : ''}`,
     TECH_CONTRACT,
   ]
     .filter(Boolean)
@@ -110,7 +111,8 @@ export function buildUserText(input: PromptInput): string {
           "REJIM: SOTUV. Anketa savollarini berma. Bu rejimda «faqat 5 ta savol» va «savollardan keyin aytaman» qoidalari AMAL QILMAYDI — narx va to'lovni aniq ayt.",
           input.salesPrompt ?? '',
           `NARXLAR: ${input.priceList || "(alohida kiritilmagan — BILIMLAR BAZASIdagi «Kurs haqida» dan ol)"}`,
-          `TO'LOV MA'LUMOTI: ${input.paymentDetails || "(kiritilmagan — mijoz rozi bo'lsa SOLD reason=agreed)"}`,
+          `TO'LOV MA'LUMOTI (shu mijoz uchun): ${input.paymentDetails || "(kiritilmagan — mijoz rozi bo'lsa SOLD reason=agreed)"}`,
+          "To'lov ma'lumotini kod mijozning davlatiga qarab o'zi yuboradi (sales_step=3 qilsang). Karta/hisob raqamini o'zing qayta yozma. «Qachon boshlaymiz?» so'ralsa — QACHON BOSHLANADI bo'yicha ayt, sana to'qima.",
           `KEYINGI QADAM: ${input.salesDirective ?? ''}`,
           `HOZIRGI VAQT (mijoz vaqti): ${input.nowLocal ?? ''}`,
           "follow_up_at: mijoz keyinroq/ertaga qaror qilishini aytsa — qachon yozish kerakligi, \"YYYY-MM-DD HH:mm\" (mijoz vaqti bilan; aniq aytmasa ertaga shu paytga yaqin). follow_up_note: nima haqida (masalan «narxni oilasi bilan maslahatlashadi»). Aks holda null.",
