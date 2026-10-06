@@ -585,3 +585,48 @@ describe('no double first message (screenshot: «Kurs»)', () => {
     expect(texts).toHaveLength(2);
   });
 });
+
+describe('Uzbek in Cyrillic is Uzbek, not Russian', () => {
+  it('detection: «Курс» is ambiguous, Uzbek Cyrillic is uz, Russian is ru', async () => {
+    const { detectLanguage, detectScript } = await import('../src/utils/text');
+    expect(detectLanguage('Курс')).toBeUndefined();
+    expect(detectLanguage('Курсингиз нархи канча?')).toBe('uz');
+    expect(detectLanguage('Салом ака курс керак эди')).toBe('uz');
+    expect(detectLanguage('Мен озмокчиман')).toBe('uz');
+    expect(detectLanguage('Здравствуйте, хочу на курс')).toBe('ru');
+    expect(detectLanguage('Сколько стоит курс?')).toBe('ru');
+    expect(detectScript('Курс')).toBe('cyrl');
+  });
+
+  it('transliteration Latin → Uzbek Cyrillic keeps links, codes and card numbers', async () => {
+    const { uzLatinToCyrillic, isConvertibleLatin } = await import('../src/utils/translit');
+    expect(uzLatinToCyrillic("Assalomu alaykum! O'zingiz haqingizda qisqacha ma'lumot")).toBe('Ассалому алайкум! Ўзингиз ҳақингизда қисқача маълумот');
+    expect(uzLatinToCyrillic('Koreyadagilar uchun: 150,000 KRW')).toBe('Кореядагилар учун: 150,000 KRW');
+    expect(isConvertibleLatin('Karta: 8600 1234 5678 9012')).toBe(false);
+  });
+
+  it('client writes «Курс» in Cyrillic → bot answers in Uzbek Cyrillic, never switches to Russian', async () => {
+    const { engine, gateway, llm } = buildApp();
+    llm.push((req) => {
+      expect(req.parts.at(-1)!.text).toContain("O'ZBEK, KIRILL alifbosida");
+      // the model wrongly thinks it is Russian
+      return { messages: ['Assalomu alaykum'], action: 'ASK_NEXT', language: 'ru' };
+    });
+    await engine.handleClientMessage(clientMsg(170, 'Курс'));
+    const lead = await Lead.findOne({ chatId: 170 });
+    expect(lead?.language).toBe('uz');
+    expect(lead?.uzScript).toBe('cyrl');
+    const texts = gateway.textsTo(170);
+    expect(texts.join(' ')).toMatch(/Ассалому алайкум/);
+    expect(texts.join(' ')).toMatch(/Бўй, вес, ёш/);
+    expect(texts.join(' ')).not.toMatch(/Здравствуйте|Рост, вес, возраст/);
+  });
+
+  it('a real Russian client still gets Russian', async () => {
+    const { engine, gateway } = buildApp();
+    await engine.handleClientMessage(clientMsg(171, 'Здравствуйте, хочу на курс'));
+    expect(gateway.textsTo(171).join(' ')).toMatch(/Здравствуйте|Рост, вес, возраст/);
+    expect((await Lead.findOne({ chatId: 171 }))?.language).toBe('ru');
+  });
+});
+

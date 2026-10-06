@@ -136,6 +136,7 @@ export const SETTINGS_SPEC: SettingDef[] = [
   { key: 'allow_advice', label: "Umumiy murabbiy maslahatlari berishi mumkin", group: 'Xulq', type: 'boolean', default: true },
   { key: 'flood_limit', label: "Spam himoyasi: 5 daqiqada maksimum xabar (oshsa AI to'xtaydi)", group: 'Xulq', type: 'number', default: 40 },
   { key: 'max_images_per_turn', label: "Bir javobda AI ko'radigan maksimum rasm", group: 'Xulq', type: 'number', default: 3 },
+  { key: 'uz_mirror_script', label: "O'zbekcha kirillda yozgan mijozga kirillda javob berish", group: 'Xulq', type: 'boolean', default: true },
   { key: 'ask_intent', label: "Birinchi xabarda «kurs bo'yichami?» deb so'rash", group: 'Xulq', type: 'boolean', default: true },
   { key: 'ai_closing_message', label: "Anketa tugaganda AI tabiiy yakuniy xabar yozsin (o'chiq = faqat «Tushunarli»)", group: 'Xulq', type: 'boolean', default: true },
   { key: 'reminder1_delay_minutes', label: '1-eslatma (daqiqa)', group: 'Eslatmalar', type: 'number', default: 60 },

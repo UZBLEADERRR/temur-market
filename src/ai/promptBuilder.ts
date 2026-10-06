@@ -46,6 +46,7 @@ export interface PromptInput {
   results: string;
   ackWords: string;
   intentPending: boolean;
+  uzCyrillic?: boolean;
   coachMode?: boolean;
   allowAdvice?: boolean;
   photos?: number;
@@ -73,7 +74,11 @@ export function buildUserText(input: PromptInput): string {
   const who = (s: string) => (s === 'client' ? 'Mijoz' : input.coachName);
   return [
     '== MIJOZ HOLATI (kod hisoblagan) ==',
-    `Mijoz tili: ${input.lang === 'ru' ? 'rus' : "o'zbek lotin"}`,
+    input.lang === 'ru'
+      ? 'Mijoz tili: rus'
+      : input.uzCyrillic
+        ? "Mijoz tili: O'ZBEK, KIRILL alifbosida yozyapti. Javobni o'zbek tilida, kirill harflarida yoz (masalan «Ассалому алайкум! Бўй, вазн, ёш?»). Rus tilida YOZMA."
+        : "Mijoz tili: o'zbek lotin",
     `Ma'lum javoblar: ${JSON.stringify(known)}`,
     `TMI: ${input.bmi ?? "noma'lum"}`,
     `Oxirgi berilgan savol: ${input.askedStep}/5 (answered_current shu savol haqida)`,

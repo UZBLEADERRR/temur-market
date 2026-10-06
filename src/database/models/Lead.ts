@@ -31,6 +31,8 @@ const LeadSchema = new Schema(
     lastName: String,
     name: String,
     language: { type: String, enum: ['uz', 'ru'], default: 'uz' },
+    /** Uzbek clients writing in Cyrillic get answers in Cyrillic. */
+    uzScript: { type: String, enum: ['latn', 'cyrl'], default: 'latn' },
 
     source: { type: String, default: 'unknown', index: true },
     sourceRaw: String,

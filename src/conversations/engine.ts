@@ -15,7 +15,8 @@ import type { SettingsService } from '../services/settings';
 import { retrieveExamples } from '../style/examples';
 import { isChatClosedError, type TelegramGateway } from '../telegram/gateway';
 import type { LeadAnswers, LeadStatus, QuestionStep, ReadyReason } from '../types/domain';
-import { containsAny, detectLanguage, escapeHtml, isGreetingOnly, normalize, splitKeywords, type Lang } from '../utils/text';
+import { containsAny, detectLanguage, detectScript, escapeHtml, isGreetingOnly, normalize, splitKeywords, type Lang } from '../utils/text';
+import { isConvertibleLatin, uzLatinToCyrillic } from '../utils/translit';
 import { KeyedMutex } from '../utils/limiter';
 import { sleep } from '../utils/time';
 import { logger } from '../utils/logger';
@@ -295,8 +296,14 @@ export class ConversationEngine {
       await lead.save();
       return;
     }
-    const lang: Lang = detectLanguage(newText) ?? (lead.language as Lang) ?? 'uz';
+    const detectedLang = detectLanguage(newText);
+    const lang: Lang = detectedLang ?? (lead.language as Lang) ?? 'uz';
     lead.language = lang;
+    const script = detectScript(newText);
+    if (script && lang === 'uz') lead.uzScript = script;
+    // the model may only change the language when our detector is unsure AND the message is long enough to judge
+    // (a single Cyrillic «Курс» must not switch an Uzbek client to Russian)
+    const modelMayJudgeLanguage = !detectedLang && newText.trim().split(/\s+/).length >= 3;
 
     const markProcessed = async () => {
       await Message.updateMany({ _id: { $in: pendingIds } }, { $set: { processed: true } });
@@ -401,7 +408,7 @@ export class ConversationEngine {
       })
       .filter(Boolean);
 
-    if (ai.language) lead.language = ai.language;
+    if (ai.language && modelMayJudgeLanguage) lead.language = ai.language;
     const outLang = (lead.language as Lang) ?? lang;
 
     if (lead.intent === 'asked' && ai.action !== 'URGENT_READY' && ai.action !== 'READY' && !markerReady) {
@@ -584,6 +591,7 @@ export class ConversationEngine {
       results: await s.get('coach_results'),
       ackWords: await s.text('ack_words', lang),
       intentPending: lead.intent === 'asked',
+      uzCyrillic: lead.language === 'uz' && lead.uzScript === 'cyrl',
       coachMode,
       allowAdvice: await s.bool('allow_advice'),
       photos: photoIds.length,
@@ -692,7 +700,11 @@ export class ConversationEngine {
   async sendToClient(lead: LeadDoc, texts: string[], opts: { final?: boolean; kind?: string; at?: Date } = {}): Promise<number> {
     let sent = 0;
     for (const raw of texts) {
-      const text = stripMarkers(raw).text;
+      let text = stripMarkers(raw).text;
+      // Uzbek client writing in Cyrillic: fixed Latin texts (first message, questions…) go out in Cyrillic too
+      if (lead.language === 'uz' && lead.uzScript === 'cyrl' && isConvertibleLatin(text) && (await this.deps.settings.bool('uz_mirror_script'))) {
+        text = uzLatinToCyrillic(text);
+      }
       if (!text) continue;
       const fresh = await Lead.findById(lead._id).select('mode status').lean();
       if (!fresh || fresh.mode !== 'AI' || (!opts.final && !['NEW', 'QUESTIONNAIRE'].includes(fresh.status))) {
