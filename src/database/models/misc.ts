@@ -104,6 +104,8 @@ const VoiceClipSchema = new Schema(
     title: { type: String, default: '' },
     description: { type: String, default: '' },
     transcript: { type: String, default: '' },
+    /** Who may receive it: KR (won prices), UZ (so'm prices), OTHER, or ALL. */
+    country: { type: String, enum: ['ALL', 'KR', 'UZ', 'OTHER'], default: 'ALL' },
     enabled: { type: Boolean, default: true },
     sentCount: { type: Number, default: 0 },
   },

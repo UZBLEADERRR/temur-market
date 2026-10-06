@@ -18,6 +18,7 @@ import type { LeadAnswers, LeadStatus, QuestionStep, ReadyReason } from '../type
 import { containsAny, detectLanguage, escapeHtml, fillTemplate, isGreetingOnly, normalize, splitKeywords, type Lang } from '../utils/text';
 import { KeyedMutex } from '../utils/limiter';
 import { humanize } from '../utils/humanize';
+import { COUNTRY_LABEL, detectCountry, mentionsPrice, mentionsWrongCurrency, priceLineFor, type CountryCode } from '../utils/country';
 import { formatLocal, HOUR, parseLocal, sleep, zonedParts } from '../utils/time';
 import { logger } from '../utils/logger';
 
@@ -337,6 +338,9 @@ export class ConversationEngine {
     }
     const lang: Lang = detectLanguage(newText) ?? (lead.language as Lang) ?? 'uz';
     lead.language = lang;
+    // where the client lives decides the currency (won / so'm) and which price voice may be sent
+    const saidCountry = detectCountry(newText);
+    if (saidCountry) lead.answers = { ...plainAnswers(lead), country: COUNTRY_LABEL[saidCountry] } as never;
 
     const markProcessed = async () => {
       await Message.updateMany({ _id: { $in: pendingIds } }, { $set: { processed: true } });
@@ -595,6 +599,7 @@ export class ConversationEngine {
     }
     await lead.save();
     const voice = await this.pickVoice(lead, ai.voice_id);
+    out = await this.enforceCountryPricing(lead, out, outLang);
     await this.sendToClient(lead, trimMessages(out, voice ? 1 : await this.deps.settings.num('max_messages_per_turn')));
     if (voice) await this.sendVoice(lead, voice);
     void this.maybeSummarize(lead).catch(() => undefined);
@@ -655,7 +660,8 @@ export class ConversationEngine {
       salesDirective,
       nowLocal: formatLocal(this.now(), this.tz()),
       clientName: lead.firstName ?? undefined,
-      voices: (await VoiceClip.find({ enabled: true }).sort({ createdAt: 1 }).limit(30).lean()).map((v) => ({
+      countryInfo: await this.countryInfo(lead, lang),
+      voices: (await VoiceClip.find({ enabled: true }).sort({ createdAt: 1 }).limit(30).lean()).filter((v) => clipFits(v.country, clientCountry(lead))).map((v) => ({
         id: String(v._id).slice(-6),
         title: v.title || 'ovozli xabar',
         summary: (v.description || v.transcript || '').replace(/\s+/g, ' ').slice(0, 220),
@@ -787,6 +793,7 @@ export class ConversationEngine {
       await lead.save();
       return;
     }
+    out.splice(0, out.length, ...(await this.enforceCountryPricing(lead, out, outLang)));
     // the payment details are sent exactly as the admin wrote them (never retyped by the model)
     const payment = (await s.get('payment_details')).trim() || paymentFromInfo(`${await s.get('price_list')}\n${await s.get('course_info')}`);
     const reachedPayment = (ai.sales_step ?? 0) >= 3;
@@ -796,7 +803,7 @@ export class ConversationEngine {
     const ex = sanitizeExtracted(ai.extracted ?? {});
     if (ex.country || ex.motivation) {
       const answers = plainAnswers(lead);
-      if (ex.country) answers.country = ex.country;
+      if (ex.country) answers.country = COUNTRY_LABEL[detectCountry(ex.country) ?? 'OTHER'];
       if (ex.motivation && !answers.motivation) answers.motivation = ex.motivation;
       lead.answers = answers as never;
     }
@@ -812,12 +819,50 @@ export class ConversationEngine {
     void this.maybeSummarize(lead).catch(() => undefined);
   }
 
+  /** Tells the model where the client lives and which currency to use (or to ask first). */
+  private async countryInfo(lead: LeadDoc, lang: Lang): Promise<string> {
+    const code = clientCountry(lead);
+    if (!code) {
+      return `noma'lum. Narx aytishdan yoki narx ovozini yuborishdan OLDIN so'ra: «${await this.deps.settings.text('country_question', lang)}». Narxni taxmin qilib aytma.`;
+    }
+    const line = priceLineFor(code, await this.deps.settings.get('price_list'));
+    const currency = code === 'KR' ? 'faqat won (KRW)' : code === 'UZ' ? "faqat so'm" : 'chet el narxi';
+    return `${COUNTRY_LABEL[code]} — narxni ${currency}da ayt${line ? ` («${line}»)` : ''}. Boshqa davlat narxini aytma.`;
+  }
+
+  /**
+   * Hard guard on prices: a client in Korea never gets a so'm price (and vice versa); if we do not know the country
+   * yet, the price text is replaced by the question «Koreyadamisiz yo O'zbekistonda?».
+   */
+  private async enforceCountryPricing(lead: LeadDoc, texts: string[], lang: Lang): Promise<string[]> {
+    const code = clientCountry(lead);
+    const out: string[] = [];
+    let asked = false;
+    for (const t of texts) {
+      if (!code) {
+        if (mentionsPrice(t)) {
+          if (!asked) out.push(await this.deps.settings.text('country_question', lang));
+          asked = true;
+          continue;
+        }
+      } else if (mentionsWrongCurrency(t, code)) {
+        const line = priceLineFor(code, await this.deps.settings.get('price_list'));
+        logger.warn({ leadId: String(lead._id), country: code }, 'Wrong currency in AI text replaced');
+        if (line && !out.includes(line)) out.push(line);
+        continue;
+      }
+      out.push(t);
+    }
+    return out;
+  }
+
   /** Resolves the model's voice_id (short id) to an enabled clip that this client has not received yet. */
   private async pickVoice(lead: LeadDoc, voiceId?: string | null) {
     if (!voiceId) return null;
     const clips = await VoiceClip.find({ enabled: true }).lean();
     const clip = clips.find((c) => String(c._id).endsWith(voiceId.trim()));
     if (!clip || (lead.sentVoiceIds ?? []).includes(String(clip._id))) return null;
+    if (!clipFits(clip.country, clientCountry(lead))) return null; // never a won price to Uzbekistan (and vice versa)
     return clip;
   }
 
@@ -1144,6 +1189,18 @@ export function trimMessages(out: string[], limit: number): string[] {
 
 /** Clear «stop» phrases: no save attempt, the client asked to stop. */
 const HARD_NO = ['yozmang', 'bezovta qilmang', 'kerak emas dedim', 'qiziqmayman', "boshqa yozmang", 'не пишите', 'не беспокойте', 'не интересно'].map((k) => normalize(k));
+
+/** The client's country code from the stored answer (set by detection or the model). */
+function clientCountry(lead: { answers?: unknown }): CountryCode | undefined {
+  const c = (plainAnswers(lead).country ?? '').trim();
+  return c ? detectCountry(c) : undefined;
+}
+
+/** A clip for ALL fits anyone; a country clip only fits a client from that country. */
+function clipFits(clipCountry: string | null | undefined, client: CountryCode | undefined): boolean {
+  const c = clipCountry ?? 'ALL';
+  return c === 'ALL' || c === client;
+}
 
 const isBareAck = (m: string) => /^(tushunarli|tushundim|aha|zo'r|yaxshi|hop|ok|понятно|ясно|хорошо|ага)[.!]?$/i.test(m.trim());
 

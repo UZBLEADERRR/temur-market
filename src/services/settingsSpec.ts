@@ -61,6 +61,12 @@ Boshqa chet eldagilar uchun: 1,200,000 so'm
     default: '',
   },
   ...q(
+    'country_question',
+    'Narxdan oldin davlatni so\'rash',
+    "Qayerdasiz, Koreyadamisiz yo O'zbekistonda?",
+    'Вы где живёте, в Корее или в Узбекистане?',
+  ),
+  ...q(
     'commitment_question',
     "Sotuvdan oldingi oxirgi savol (qat'iylik)",
     "Va oxirgi savol: nega aynan hozir bu ishga bel bog'layapsiz? Hozir boshlasak, jiddiy kirishishga qaroringiz qat'iymi?",

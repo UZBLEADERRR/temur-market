@@ -57,6 +57,7 @@ export interface PromptInput {
   salesDirective?: string;
   nowLocal?: string;
   clientName?: string;
+  countryInfo?: string;
   voices?: Array<{ id: string; title: string; summary: string; sent: boolean }>;
   soldContext?: boolean;
   priceList?: string;
@@ -88,6 +89,7 @@ export function buildUserText(input: PromptInput): string {
   return [
     '== MIJOZ HOLATI (kod hisoblagan) ==',
     `Mijoz tili: ${input.lang === 'ru' ? 'rus' : "o'zbek lotin"}`,
+    input.countryInfo ? `MIJOZ DAVLATI: ${input.countryInfo}` : '',
     input.clientName ? `Mijoz ismi (Telegram): ${input.clientName} — ba'zan, tabiiy joyda ism bilan murojaat qil (har xabarda emas; ism g'alati yoki taxallus bo'lsa ishlatma).` : '',
     `Ma'lum javoblar: ${JSON.stringify(known)}`,
     `TMI: ${input.bmi ?? "noma'lum"}`,

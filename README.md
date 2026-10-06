@@ -29,6 +29,16 @@
   - Shartlar: to'lov oldindan; qoida buzilsa qaytarilmaydi.
   - **To'lov ma'lumoti** (karta) maydonini o'zingiz to'ldirasiz.
 
+### Won va so'm: davlatga qarab narx
+
+- **Davlat aniqlanmaguncha narx aytilmaydi.** Bot mijozning qayerdaligini bilmasa, avval "Qayerdasiz, Koreyadamisiz yo O'zbekistonda?" deb so'raydi. Bu savol sozlamalarda o'zgartiriladi.
+- **Davlat avtomatik aniqlanadi.** "Koreadaman", "Seulda", "Toshkentdaman", "Uzbda", "Moskvada" kabi gaplardan bilinadi va mijoz kartochkasiga yoziladi.
+- **Har bir ovozda "Kimga" belgisi bor:** 🇰🇷 Koreya (won), 🇺🇿 O'zbekiston (so'm), 🌍 boshqa chet el yoki hammaga.
+  - Belgi ovozni saqlashda caption yoki matndagi "won", "so'm", "Koreya" so'zlaridan avtomatik qo'yiladi.
+  - Uni mini ilovada yoki `/voice_country <id> KR|UZ|OTHER|ALL` buyrug'i bilan o'zgartirasiz.
+- **Mijozga faqat o'z davlatiga mos ovoz ketadi.** AI noto'g'risini tanlasa ham, kod uni yubormaydi.
+- **Matnda valyuta tekshiriladi.** Koreyadagi mijozga "so'm" yozilgan narx chiqsa (yoki aksincha), kod uni "Narxlar"dagi to'g'ri qator bilan almashtiradi.
+
 ### Kuchli, lekin halol sotuvchi
 
 Sotuv skripti (mini ilova → Sozlamalar → "Sotuv skripti") quyidagi usullar asosida tuzilgan:

@@ -580,7 +580,7 @@ describe('sales stage and coach messages', () => {
       expect(req.system).toContain('800 000');
       return { messages: ['Sizga individual format mos keladi', "Individual 50 kun — 800 000 so'm. Boshlaymizmi?"], action: 'ASK_NEXT' };
     });
-    await engine.handleClientMessage(clientMsg(90, "Kurs: 180 95 25, 1 yil zal, 80 kg gacha, 4 kun, vaqt yetmagan, sog'man"));
+    await engine.handleClientMessage(clientMsg(90, "Kurs: 180 95 25, 1 yil zal, 80 kg gacha, 4 kun, vaqt yetmagan, sog'man. Toshkentdaman"));
     const lead = await Lead.findOne({ chatId: 90 });
     expect(lead?.status).toBe('SALES');
     expect(lead?.mode).toBe('AI');
@@ -676,7 +676,7 @@ describe('sales funnel goes all the way to payment', () => {
       expect(t).not.toContain('Bazada javobi yo\'q savolga');
       return { messages: ["Sizga individual format: 50 kun, 800 000 so'm", 'Boshlaymizmi?'], action: 'ASK_NEXT', sales_step: 2 };
     });
-    await engine.handleClientMessage(clientMsg(95, 'Kurs: 180 95 25, hammasi'));
+    await engine.handleClientMessage(clientMsg(95, 'Kurs: 180 95 25, hammasi. Toshkentdaman'));
     expect(gateway.textsTo(95).at(-2)).toContain('800 000');
 
     // model says "here are the details" but forgets the card → backend appends the exact admin text
@@ -1026,5 +1026,75 @@ describe('bot2: strong but honest closer', () => {
     for (const s of ["Og'riqni aniqla", 'Ijtimoiy isbot', 'kunlikka', "Kichik «ha»lar", 'Birinchi «yo\'q» — oxiri emas', 'Soxta shoshilinchlik']) {
       expect(script).toContain(s);
     }
+  });
+});
+
+describe('bot2: won for Korea, so\'m for Uzbekistan', () => {
+  const done = {
+    messages: ['Rahmat!'],
+    action: 'READY',
+    reason: 'completed',
+    answered_current: true,
+    extracted: { trainingExperience: '1 yil', goal: 'ozish', trainingDays: 3, trainingLocation: 'zal', previousAttempts: 'reja yo\'q', healthProblems: "yo'q" },
+  };
+  async function inSales(chatId: number) {
+    const ctx = buildApp();
+    await ctx.settings.set({ ask_commitment: false });
+    ctx.llm.push(done, { messages: ['Taklif', 'Shartlar ma\'qulmi?'], action: 'ASK_NEXT', sales_step: 1 });
+    await ctx.engine.handleClientMessage(clientMsg(chatId, 'Kurs: 175 82 24, hammasi'));
+    return ctx;
+  }
+
+  it('country unknown → no price is sent; the bot asks «Koreyadamisiz yo O\'zbekistonda?» first', async () => {
+    const { engine, gateway, llm } = await inSales(140);
+    llm.push((req) => {
+      expect(req.parts.at(-1)!.text).toContain("MIJOZ DAVLATI: noma'lum");
+      return { messages: ['Narxi 150 ming won'], action: 'ASK_NEXT' };
+    });
+    await engine.handleClientMessage(clientMsg(140, 'Narxi qancha?'));
+    expect(gateway.textsTo(140).at(-1)).toBe("Qayerdasiz, Koreyadamisiz yo O'zbekistonda?");
+  });
+
+  it("client in Korea never gets a so'm price — the text is replaced with the Korea price line", async () => {
+    const { engine, gateway, llm } = await inSales(141);
+    llm.push((req) => {
+      expect(req.parts.at(-1)!.text).toContain('MIJOZ DAVLATI: Koreya');
+      expect(req.parts.at(-1)!.text).toContain('faqat won');
+      return { messages: ["Narxi 1 mln so'm", 'Boshlaymizmi?'], action: 'ASK_NEXT' };
+    });
+    await engine.handleClientMessage(clientMsg(141, 'Koreadaman, narxi qancha?'));
+    const texts = gateway.textsTo(141);
+    expect(texts.at(-2)).toBe('Koreyadagilar uchun: 150,000 KRW');
+    expect(texts.some((t) => t.includes("1 mln so'm"))).toBe(false);
+    expect((await Lead.findOne({ chatId: 141 }))?.answers?.country).toBe('Koreya');
+  });
+
+  it('only the price voice of the client\'s country is offered and sent', async () => {
+    const { VoiceClip } = await import('../src/database/models/misc');
+    const kr = await VoiceClip.create({ fileId: 'KR_PRICE', title: 'narx', transcript: '150 ming won', country: 'KR' });
+    const uz = await VoiceClip.create({ fileId: 'UZ_PRICE', title: 'narx', transcript: '1 million so\'m', country: 'UZ' });
+    const { engine, gateway, llm } = await inSales(142);
+    llm.push((req) => {
+      const t = req.parts.at(-1)!.text!;
+      expect(t).toContain(String(uz._id).slice(-6));
+      expect(t).not.toContain(String(kr._id).slice(-6));
+      // the model tries the wrong one anyway → blocked
+      return { messages: ['Narxni ovozli aytdim'], action: 'ASK_NEXT', voice_id: String(kr._id).slice(-6) };
+    });
+    await engine.handleClientMessage(clientMsg(142, "Toshkentdaman. Narxi?"));
+    expect(gateway.voices).toHaveLength(0);
+    llm.push({ messages: ['Mana'], action: 'ASK_NEXT', voice_id: String(uz._id).slice(-6) });
+    await engine.handleClientMessage(clientMsg(142, 'Ha ayting'));
+    expect(gateway.voices).toEqual([{ chatId: 142, fileId: 'UZ_PRICE' }]);
+  });
+
+  it('clip country is guessed from caption / transcript', async () => {
+    const { guessClipCountry, detectCountry } = await import('../src/utils/country');
+    expect(guessClipCountry('narx koreya — 150 ming won')).toBe('KR');
+    expect(guessClipCountry("narxi 1 million so'm")).toBe('UZ');
+    expect(guessClipCountry('guruh qanday ishlaydi')).toBe('ALL');
+    expect(detectCountry('Koreyadaman')).toBe('KR');
+    expect(detectCountry('Uzbda man')).toBe('UZ');
+    expect(detectCountry('Москвада яшайман')).toBe('OTHER');
   });
 });

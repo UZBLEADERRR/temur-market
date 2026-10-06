@@ -11,6 +11,9 @@ import { LEAD_STATUSES, type LeadStatus } from '../types/domain';
 import { escapeHtml, truncate } from '../utils/text';
 import { exportCsv, exportXlsx, formatQueue, formatStats, getDailyStats } from './adminQueries';
 import { logger } from '../utils/logger';
+import { guessClipCountry } from '../utils/country';
+
+const CLIP_COUNTRY = { ALL: 'hammaga', KR: '🇰🇷 Koreya (won)', UZ: "🇺🇿 O'zbekiston (so'm)", OTHER: '🌍 boshqa chet el' } as const;
 
 const HELP = `<b>TEMUR.FIT AI-yordamchi — admin</b>
 
@@ -357,6 +360,7 @@ export function registerAdminHandlers(bot: Bot, app: AppContext): void {
     await reply(ctx, '⏳ Saqlandi, matnga aylantiryapman...');
     const transcript = await app.ai.transcribe(await app.gateway.downloadFile(v.file_id), v.mime_type ?? 'audio/ogg').catch(() => '');
     clip.transcript = transcript.slice(0, 4000);
+    clip.country = guessClipCountry(`${caption} ${transcript}`);
     await clip.save();
     const shortId = String(clip._id).slice(-6);
     if (!clip.title) awaitingVoiceTitle.set(ctx.from.id, String(clip._id));
@@ -364,6 +368,7 @@ export function registerAdminHandlers(bot: Bot, app: AppContext): void {
       ctx,
       `🎙 Ovoz saqlandi (<code>${shortId}</code>, ${v.duration} s).\n` +
         (transcript ? `Matni: <i>${escapeHtml(truncate(transcript, 800))}</i>\n\n` : "Matnga aylantirib bo'lmadi — nomini aniq yozing.\n\n") +
+        `Kimga: <b>${CLIP_COUNTRY[clip.country as keyof typeof CLIP_COUNTRY]}</b> (o'zgartirish: /voice_country ${shortId} KR|UZ|OTHER|ALL)\n` +
         (clip.title
           ? `Nomi: <b>${escapeHtml(clip.title)}</b>. AI uni mos vaziyatda mijozlarga yuboradi.`
           : "Bu ovoz nima haqida? Qisqa nom yozing (masalan: <i>narx</i>, <i>guruh qanday ishlaydi</i>, <i>taklif</i>). /skip — matnning o'zi yetadi."),
@@ -380,9 +385,9 @@ export function registerAdminHandlers(bot: Bot, app: AppContext): void {
     if (!list.length) return reply(ctx, "🎙 Ovozlar yo'q. Botga ovozli xabar yuboring — saqlanadi va AI mijozlarga mos vaziyatda yuboradi.");
     const lines = list.map(
       (c) =>
-        `${c.enabled ? '🟢' : '⚪️'} <code>${String(c._id).slice(-6)}</code> <b>${escapeHtml(c.title || 'nomsiz')}</b> · ${c.duration ?? '?'} s · ${c.sentCount} marta yuborilgan\n<i>${escapeHtml(truncate(c.transcript || c.description || '', 120))}</i>`,
+        `${c.enabled ? '🟢' : '⚪️'} <code>${String(c._id).slice(-6)}</code> <b>${escapeHtml(c.title || 'nomsiz')}</b> · ${CLIP_COUNTRY[(c.country ?? 'ALL') as keyof typeof CLIP_COUNTRY]} · ${c.duration ?? '?'} s · ${c.sentCount} marta yuborilgan\n<i>${escapeHtml(truncate(c.transcript || c.description || '', 120))}</i>`,
     );
-    await reply(ctx, `🎙 <b>Ovozlar</b>\n\n${lines.join('\n\n')}\n\n/voice_title &lt;id&gt; &lt;nom&gt; · /voice_test &lt;id&gt; · /voice_off &lt;id&gt; · /voice_on &lt;id&gt; · /voice_del &lt;id&gt;`);
+    await reply(ctx, `🎙 <b>Ovozlar</b>\n\n${lines.join('\n\n')}\n\n/voice_title &lt;id&gt; &lt;nom&gt; · /voice_country &lt;id&gt; KR|UZ|OTHER|ALL · /voice_test &lt;id&gt; · /voice_off &lt;id&gt; · /voice_on &lt;id&gt; · /voice_del &lt;id&gt;`);
   });
 
   const findClip = async (arg?: string) => {
@@ -391,6 +396,15 @@ export function registerAdminHandlers(bot: Bot, app: AppContext): void {
     const all = await VoiceClip.find();
     return all.find((c) => String(c._id).endsWith(id)) ?? null;
   };
+  admin.command('voice_country', async (ctx) => {
+    const clip = await findClip(ctx.match);
+    const code = (ctx.match ?? '').trim().split(/\s+/)[1]?.toUpperCase();
+    if (!clip || !code || !(code in CLIP_COUNTRY)) return reply(ctx, 'Format: /voice_country &lt;id&gt; KR|UZ|OTHER|ALL');
+    clip.country = code as keyof typeof CLIP_COUNTRY;
+    await clip.save();
+    await reply(ctx, `✅ ${escapeHtml(clip.title || 'ovoz')} → ${CLIP_COUNTRY[code as keyof typeof CLIP_COUNTRY]}`);
+  });
+
   admin.command('voice_title', async (ctx) => {
     const clip = await findClip(ctx.match);
     if (!clip) return reply(ctx, 'Topilmadi. /voices');

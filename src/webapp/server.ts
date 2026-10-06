@@ -310,6 +310,7 @@ export function createWebApp(app: AppContext, extra?: (e: express.Express) => vo
       if (typeof req.body?.title === 'string') $set.title = req.body.title.slice(0, 80);
       if (typeof req.body?.description === 'string') $set.description = req.body.description.slice(0, 1000);
       if (typeof req.body?.enabled === 'boolean') $set.enabled = req.body.enabled;
+      if (['ALL', 'KR', 'UZ', 'OTHER'].includes(req.body?.country)) $set.country = req.body.country;
       await VoiceClip.updateOne({ _id: req.params.id }, { $set });
       res.json({ ok: true });
     }),
