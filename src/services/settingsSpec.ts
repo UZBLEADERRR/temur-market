@@ -101,6 +101,7 @@ Boshqa chet eldagilar uchun: 1,200,000 so'm
     "Va oxirgi savol: nega aynan hozir bu ishga bel bog'layapsiz? Hozir boshlasak, jiddiy kirishishga qaroringiz qat'iymi?",
     'И последний вопрос: почему решили взяться именно сейчас? Если начнём сейчас — готовы серьёзно включиться?',
   ),
+  { key: 'uz_mirror_script', label: "O'zbekcha kirillda yozgan mijozga kirillda javob berish", group: 'Xulq', type: 'boolean', default: true },
   { key: 'ask_commitment', label: "Taklifdan oldin «nega aynan hozir?» savolini berish", group: 'Xulq', type: 'boolean', default: true },
   {
     key: 'results_keywords',

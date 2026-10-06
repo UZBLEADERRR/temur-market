@@ -15,9 +15,10 @@ import type { SettingsService } from '../services/settings';
 import { retrieveExamples } from '../style/examples';
 import { isChatClosedError, type TelegramGateway } from '../telegram/gateway';
 import type { LeadAnswers, LeadStatus, QuestionStep, ReadyReason } from '../types/domain';
-import { containsAny, detectLanguage, escapeHtml, fillTemplate, isGreetingOnly, normalize, splitKeywords, type Lang } from '../utils/text';
+import { containsAny, detectLanguage, detectScript, escapeHtml, fillTemplate, isGreetingOnly, normalize, splitKeywords, type Lang } from '../utils/text';
 import { KeyedMutex } from '../utils/limiter';
 import { humanize } from '../utils/humanize';
+import { isConvertibleLatin, uzLatinToCyrillic } from '../utils/translit';
 import { COUNTRY_LABEL, detectCountry, mentionsPrice, mentionsWrongCurrency, priceLineFor, type CountryCode } from '../utils/country';
 import { formatLocal, HOUR, parseLocal, sleep, zonedParts } from '../utils/time';
 import { logger } from '../utils/logger';
@@ -336,8 +337,14 @@ export class ConversationEngine {
       await lead.save();
       return;
     }
-    const lang: Lang = detectLanguage(newText) ?? (lead.language as Lang) ?? 'uz';
+    const detectedLang = detectLanguage(newText);
+    const lang: Lang = detectedLang ?? (lead.language as Lang) ?? 'uz';
     lead.language = lang;
+    const script = detectScript(newText);
+    if (script && lang === 'uz') lead.uzScript = script;
+    // the model may only change the language when our detector is unsure AND the message is long enough to judge
+    // (a single Cyrillic «Курс» must not switch an Uzbek client to Russian)
+    const modelMayJudgeLanguage = !detectedLang && newText.trim().split(/\s+/).length >= 3;
     // where the client lives decides the currency (won / so'm) and which price voice may be sent
     const saidCountry = detectCountry(newText);
     if (saidCountry) lead.answers = { ...plainAnswers(lead), country: COUNTRY_LABEL[saidCountry] } as never;
@@ -449,7 +456,7 @@ export class ConversationEngine {
       })
       .filter(Boolean);
 
-    if (ai.language) lead.language = ai.language;
+    if (ai.language && modelMayJudgeLanguage) lead.language = ai.language;
     const outLang = (lead.language as Lang) ?? lang;
 
     if (lead.intent === 'asked' && ai.action !== 'URGENT_READY' && ai.action !== 'READY' && !markerReady) {
@@ -661,6 +668,7 @@ export class ConversationEngine {
       salesDirective,
       nowLocal: formatLocal(this.now(), this.tz()),
       clientName: lead.firstName ?? undefined,
+      uzCyrillic: lead.language === 'uz' && lead.uzScript === 'cyrl',
       countryInfo: await this.countryInfo(lead, lang),
       resultsLink: (await s.get('results_link')).trim() || undefined,
       resultsLinkSent: Boolean(lead.resultsLinkSent),
@@ -771,7 +779,8 @@ export class ConversationEngine {
         lead.refusalCount = (lead.refusalCount ?? 0) + 1;
       }
     }
-    if (ai.language) lead.language = ai.language;
+    const salesText = newMessages.join(' ');
+    if (ai.language && !detectLanguage(salesText) && salesText.trim().split(/\s+/).length >= 3) lead.language = ai.language;
     const outLang = (lead.language as Lang) ?? lang;
     const recent = new Set((await this.recentAiTexts(lead, 4)).map(normalize));
     let markerUrgent = false;
@@ -1071,7 +1080,11 @@ export class ConversationEngine {
   async sendToClient(lead: LeadDoc, texts: string[], opts: { final?: boolean; kind?: string; at?: Date } = {}): Promise<number> {
     let sent = 0;
     for (const raw of texts) {
-      const text = humanize(stripMarkers(raw).text);
+      let text = humanize(stripMarkers(raw).text);
+      // Uzbek client writing in Cyrillic: fixed Latin texts (first message, questions…) go out in Cyrillic too
+      if (lead.language === 'uz' && lead.uzScript === 'cyrl' && isConvertibleLatin(text) && (await this.deps.settings.bool('uz_mirror_script'))) {
+        text = uzLatinToCyrillic(text);
+      }
       if (!text) continue;
       const fresh = await Lead.findById(lead._id).select('mode status').lean();
       if (!fresh || fresh.mode !== 'AI' || (!opts.final && !ACTIVE_STATUSES.includes(fresh.status as LeadStatus))) {

@@ -57,6 +57,7 @@ export interface PromptInput {
   salesDirective?: string;
   nowLocal?: string;
   clientName?: string;
+  uzCyrillic?: boolean;
   countryInfo?: string;
   resultsLink?: string;
   resultsLinkSent?: boolean;
@@ -91,7 +92,11 @@ export function buildUserText(input: PromptInput): string {
   const who = (s: string) => (s === 'client' ? 'Mijoz' : s === 'temur' ? `${input.coachName} (O'ZI yozgan)` : input.coachName);
   return [
     '== MIJOZ HOLATI (kod hisoblagan) ==',
-    `Mijoz tili: ${input.lang === 'ru' ? 'rus' : "o'zbek lotin"}`,
+    input.lang === 'ru'
+      ? 'Mijoz tili: rus'
+      : input.uzCyrillic
+        ? "Mijoz tili: O'ZBEK, KIRILL alifbosida yozyapti. Javobni o'zbek tilida, kirill harflarida yoz (masalan «Ассалому алайкум! Бўй, вазн, ёш?»). Rus tilida YOZMA."
+        : "Mijoz tili: o'zbek lotin",
     input.countryInfo ? `MIJOZ DAVLATI: ${input.countryInfo}` : '',
     input.resultsLink
       ? input.resultsLinkSent
