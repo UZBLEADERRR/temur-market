@@ -8,7 +8,11 @@ export interface SentRef {
 /** Everything the core needs from Telegram. The grammY implementation lives in grammyGateway.ts; tests use a fake. */
 export interface TelegramGateway {
   sendBusinessMessage(connectionId: string, chatId: number, text: string): Promise<{ messageId: number }>;
-  sendTyping(connectionId: string, chatId: number): Promise<void>;
+  sendTyping(connectionId: string, chatId: number, action?: 'typing' | 'record_voice'): Promise<void>;
+  /** Sends a stored voice message (file_id) from the business account. */
+  sendBusinessVoice(connectionId: string, chatId: number, fileId: string): Promise<{ messageId: number }>;
+  /** Sends a voice to an admin chat (to listen to a stored clip). */
+  sendAdminVoice(chatId: number, fileId: string, caption?: string): Promise<void>;
   notifyAdmins(html: string, keyboard?: InlineKeyboardMarkup): Promise<SentRef[]>;
   editAdminMessage(ref: SentRef, html: string, keyboard?: InlineKeyboardMarkup): Promise<void>;
   sendAdminDocument(chatId: number, data: Buffer, fileName: string, caption?: string): Promise<void>;

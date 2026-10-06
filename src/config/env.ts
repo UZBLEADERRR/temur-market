@@ -21,10 +21,13 @@ const EnvSchema = z.object({
   TELEGRAM_ADMIN_ID: csvIds,
   ADMIN_IDS: csvIds,
   TEMUR_TELEGRAM_ID: z.coerce.number().optional(),
-  MONGODB_URI: z.string().default('mongodb://127.0.0.1:27017/temur_fit'),
+  MONGODB_URI: z.string().default('mongodb://127.0.0.1:27017/temur_bot2'),
+  /** openrouter (default for bot2) or gemini (Google API directly). */
+  LLM_PROVIDER: z.enum(['openrouter', 'gemini']).default('openrouter'),
   LLM_API_KEY: z.string().default(''),
-  LLM_MODEL: z.string().default('gemini-3.8-flash'),
-  LLM_BASE_URL: z.string().default('https://generativelanguage.googleapis.com/v1beta'),
+  OPENROUTER_API_KEY: z.string().optional(),
+  LLM_MODEL: z.string().optional(),
+  LLM_BASE_URL: z.string().optional(),
   LLM_TIMEOUT_MS: z.coerce.number().default(30000),
   LLM_MAX_CONCURRENCY: z.coerce.number().default(8),
   PORT: z.coerce.number().default(3000),
@@ -37,7 +40,12 @@ const EnvSchema = z.object({
   LOG_LEVEL: z.string().default('info'),
 });
 
-export type Env = z.infer<typeof EnvSchema> & { adminIds: number[]; publicUrl?: string };
+export type Env = Omit<z.infer<typeof EnvSchema>, 'LLM_MODEL' | 'LLM_BASE_URL'> & {
+  LLM_MODEL: string;
+  LLM_BASE_URL: string;
+  adminIds: number[];
+  publicUrl?: string;
+};
 
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   const parsed = EnvSchema.parse(source);
@@ -51,7 +59,15 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   const publicUrl =
     parsed.PUBLIC_URL?.replace(/\/$/, '') ||
     (parsed.RAILWAY_PUBLIC_DOMAIN ? `https://${parsed.RAILWAY_PUBLIC_DOMAIN}` : undefined);
-  return { ...parsed, adminIds, publicUrl };
+  const openrouter = parsed.LLM_PROVIDER === 'openrouter';
+  return {
+    ...parsed,
+    LLM_API_KEY: parsed.OPENROUTER_API_KEY || parsed.LLM_API_KEY,
+    LLM_MODEL: parsed.LLM_MODEL || (openrouter ? 'google/gemini-3.8-flash' : 'gemini-3.8-flash'),
+    LLM_BASE_URL: parsed.LLM_BASE_URL || (openrouter ? 'https://openrouter.ai/api/v1' : 'https://generativelanguage.googleapis.com/v1beta'),
+    adminIds,
+    publicUrl,
+  };
 }
 
 export const env = loadEnv();
@@ -59,7 +75,7 @@ export const env = loadEnv();
 export function assertProductionEnv(e: Env): void {
   const missing: string[] = [];
   if (!e.TELEGRAM_BOT_TOKEN) missing.push('TELEGRAM_BOT_TOKEN');
-  if (!e.LLM_API_KEY) missing.push('LLM_API_KEY');
+  if (!e.LLM_API_KEY) missing.push(e.LLM_PROVIDER === 'openrouter' ? 'OPENROUTER_API_KEY' : 'LLM_API_KEY');
   if (e.adminIds.length === 0) missing.push('TELEGRAM_ADMIN_ID');
   if (missing.length) throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
 }

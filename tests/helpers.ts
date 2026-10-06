@@ -45,6 +45,13 @@ export class FakeGateway implements TelegramGateway {
   async sendTyping() {
     this.typing++;
   }
+  voices: Array<{ chatId: number; fileId: string }> = [];
+  async sendBusinessVoice(_c: string, chatId: number, fileId: string) {
+    if (this.failSend) throw this.failSend;
+    this.voices.push({ chatId, fileId });
+    return { messageId: this.nextId++ };
+  }
+  async sendAdminVoice() {}
   async notifyAdmins(html: string, keyboard?: InlineKeyboardMarkup) {
     this.admin.push({ html, keyboard });
     return [{ chatId: 1, messageId: this.nextId++ }];

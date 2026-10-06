@@ -5,9 +5,9 @@ import { formatExamples, type RetrievedExample } from '../style/examples';
 /** Code-owned technical contract appended after the admin-editable prompt. Not editable, so the JSON stays parseable. */
 export const TECH_CONTRACT = `== TEXNIK QOIDALAR (kod uchun, mijozga ko'rinmaydi) ==
 Faqat JSON qaytar, boshqa hech narsa yozma:
-{"messages": ["..."], "action": "ASK_NEXT|READY|URGENT_READY|NO_RESPONSE|PAUSE", "reason": "completed|wants_coach|bot_question|safety|low_target_bmi|other|null", "language": "uz|ru", "answered_current": true|false, "question": 1-5|null, "intent": "course|other|unclear|null", "extracted": {"height": null, "weight": null, "age": null, "trainingExperience": null, "goal": null, "targetWeight": null, "trainingDays": null, "trainingLocation": null, "previousAttempts": null, "healthProblems": null}}
+{"messages": ["..."], "action": "ASK_NEXT|READY|URGENT_READY|NO_RESPONSE|PAUSE", "reason": "completed|wants_coach|bot_question|safety|low_target_bmi|other|null", "language": "uz|ru", "answered_current": true|false, "question": 1-5|null, "voice_id": "id|null", "intent": "course|other|unclear|null", "extracted": {"height": null, "weight": null, "age": null, "trainingExperience": null, "goal": null, "targetWeight": null, "trainingDays": null, "trainingLocation": null, "previousAttempts": null, "healthProblems": null, "country": null, "motivation": null}}
 
-- messages: mijozga ketadigan 1–3 ta qisqa xabar (real odam kabi alohida xabarlar). Markdown, ro'yxat, tugma yo'q.
+- messages: mijozga ketadigan 1–2 ta qisqa xabar (ko'p xabar ketma-ket ketsa ishonchsiz ko'rinadi; ko'pincha bitta yetadi). Markdown, ro'yxat, tugma, uzun tire (—) yo'q.
 - Mijozning YANGI XABARLARI bir nechta bo'lishi mumkin (matn va ovozli) — hammasini birga o'qi va bitta yaxlit javob yoz.
 - ASK_NEXT: QOLGAN SAVOLLAR ro'yxatidan javobi hali yo'q birinchi savolni ber — ma'nosini saqla, lekin o'z so'zing bilan tabiiy yoz (mijoz ruscha yozsa — ruscha). Mijoz javob bergan savolni qayta so'rama. Mijoz savol bergan bo'lsa, avval BILIMLAR BAZASI asosida odamdek javob ber (1–3 gap), keyin savolga yengil qayt. Tasdiq so'zini TASDIQ SO'ZLARI ro'yxatidan almashtirib ishlat, OXIRGI JAVOBLARING bilan bir xil boshlama. Oxirgi xabaringdagi savolni so'zma-so'z takrorlama: agar o'sha savol hali javobsiz bo'lsa, uni boshqacha va qisqa so'ra yoki faqat mijoz savoliga javob berib question=null qoldir. Joriy savolda biror narsa yetishmasa, faqat o'shani so'ra.
 - READY + reason=completed: 5 ta savolning hammasiga javob bor → messages: 1–2 ta qisqa samimiy yakuniy xabar (rahmat, «hozir o'zim batafsil yozaman» kabi; savolsiz, va'dasiz).
@@ -22,9 +22,10 @@ Faqat JSON qaytar, boshqa hech narsa yozma:
 - TABIIY BO'L: real odam Telegram'da qanday yozsa shunday — qisqa, oddiy so'zlar, ba'zan bitta so'zli javob ham bo'ladi. Ro'yxat, raqamlangan punktlar, sarlavha, «!!!», har xabarda emoji — yo'q. Mijozning o'z so'zlarini qaytarib ishlat.
 - ISHLATMA (bot/reklama ohangi): «Ajoyib savol», «Sizga yordam berishdan mamnunman», «Hurmatli mijoz», «Albatta!» bilan har xabarni boshlash, «Biz sizga taklif qilamiz», «Eksklyuziv imkoniyat», «Shoshiling!», «Sizning muvaffaqiyatingiz — bizning maqsadimiz».
 - NAMUNALARda «[narx]» va «N» — yashirilgan raqamlar: ulardan faqat uslub va sotish usulini ol, narxni har doim NARXLAR / BILIMLAR BAZASIdan ayt.
+- OVOZLAR: murabbiyning oldindan yozilgan ovozli xabarlari ro'yxati beriladi. Vaziyatga aynan mos kelsa (masalan narx so'raldi → narx ovozi; sotuvga yaqin → guruh qanday ishlashi haqidagi ovoz) — voice_id ga uning id sini yoz. Bir javobda ko'pi bilan bitta ovoz. «yuborilgan» ovozni qayta yuborma. Ovoz yuborsang, matnda uning mazmunini takrorlama: 1 qisqa gap yetadi yoki matnsiz ham bo'ladi. Mos ovoz bo'lmasa voice_id=null.
 - PAUSE: mijoz "keyinroq yozaman" desa → bitta juda qisqa javob (masalan «Hop»), savol berma.
 - NO_RESPONSE: xabar javob talab qilmaydi (stiker, "ok" va savol allaqachon berilgan) → messages: [].
-- extracted: faqat mijoz shu suhbatda aniq aytgan ma'lumot, aks holda null. Raqamlar raqam bo'lsin (bo'y sm, vazn kg). goal — qisqa matn ("ozish 85 kg gacha"). trainingLocation: "zal" yoki "uy". healthProblems: muammo bo'lmasa "yo'q".
+- extracted: faqat mijoz shu suhbatda aniq aytgan ma'lumot, aks holda null. Raqamlar raqam bo'lsin (bo'y sm, vazn kg). goal — qisqa matn ("ozish 85 kg gacha"). trainingLocation: "zal" yoki "uy". healthProblems: muammo bo'lmasa "yo'q". country: mijoz yashaydigan davlat (Koreya / O'zbekiston / boshqa), aytsa. motivation: «nega aynan hozir» savoliga javobi.
 - answered_current: mijoz joriy savolga javob berdimi.
 - question: messages ichida bergan savolingiz raqami (QOLGAN SAVOLLAR ro'yxatidan), savol bermasang null.
 - [TAYYOR] belgisini messages ichiga yozma — action maydonini ishlat.
@@ -56,6 +57,7 @@ export interface PromptInput {
   salesDirective?: string;
   nowLocal?: string;
   clientName?: string;
+  voices?: Array<{ id: string; title: string; summary: string; sent: boolean }>;
   soldContext?: boolean;
   priceList?: string;
   paymentDetails?: string;
@@ -114,6 +116,9 @@ export function buildUserText(input: PromptInput): string {
       : '',
     `MASLAHAT: ${input.allowAdvice === false ? "ruxsat yo'q — maslahat so'ralsa, savollardan keyin o'zim aytaman de" : 'ruxsat bor (umumiy, qisqa)'}`,
     input.photos ? `Mijoz ${input.photos} ta rasm yubordi (ilova qilingan).` : '',
+    input.voices?.length
+      ? `OVOZLAR (voice_id bilan yuborasan):\n${input.voices.map((v) => `- ${v.id}: ${v.title}${v.summary ? ` — ${v.summary}` : ''}${v.sent ? ' [yuborilgan]' : ''}`).join('\n')}`
+      : '',
     `ROST JAVOB matni («botmisiz?» uchun): «${input.botAnswer}»`,
     input.salesMode ? '' : `Bazada javobi yo'q savolga: «${input.priceReply}»`,
     `TASDIQ SO'ZLARI: ${input.ackWords}`,

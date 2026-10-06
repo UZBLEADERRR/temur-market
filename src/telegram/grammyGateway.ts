@@ -16,8 +16,17 @@ export class GrammyGateway implements TelegramGateway {
     return { messageId: m.message_id };
   }
 
-  async sendTyping(connectionId: string, chatId: number) {
-    await this.bot.api.sendChatAction(chatId, 'typing', { business_connection_id: connectionId });
+  async sendTyping(connectionId: string, chatId: number, action: 'typing' | 'record_voice' = 'typing') {
+    await this.bot.api.sendChatAction(chatId, action, { business_connection_id: connectionId });
+  }
+
+  async sendBusinessVoice(connectionId: string, chatId: number, fileId: string) {
+    const m = await this.bot.api.sendVoice(chatId, fileId, { business_connection_id: connectionId });
+    return { messageId: m.message_id };
+  }
+
+  async sendAdminVoice(chatId: number, fileId: string, caption?: string) {
+    await this.bot.api.sendVoice(chatId, fileId, caption ? { caption } : {});
   }
 
   async notifyAdmins(html: string, keyboard?: InlineKeyboardMarkup): Promise<SentRef[]> {

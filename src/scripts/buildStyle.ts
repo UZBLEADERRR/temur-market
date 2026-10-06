@@ -3,14 +3,14 @@ import { env } from '../config/env';
 import { connectDatabase, disconnectDatabase } from '../database/connection';
 import { SettingsService } from '../services/settings';
 import { AiService } from '../ai/aiService';
-import { GeminiClient } from '../ai/geminiClient';
+import { createLlmClient } from '../ai/createLlmClient';
 import { rebuildStyleProfile } from '../style/styleProfile';
 
 async function main() {
   await connectDatabase(env.MONGODB_URI);
   const settings = new SettingsService();
   const ai = new AiService(
-    new GeminiClient({ apiKey: env.LLM_API_KEY, model: env.LLM_MODEL, baseUrl: env.LLM_BASE_URL, timeoutMs: env.LLM_TIMEOUT_MS }),
+    createLlmClient(env),
     settings,
   );
   const { profile, stats } = await rebuildStyleProfile(ai, settings);

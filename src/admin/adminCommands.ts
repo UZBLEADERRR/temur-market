@@ -1,6 +1,6 @@
 import { InlineKeyboard, type Bot, type Context } from 'grammy';
 import { Lead } from '../database/models/Lead';
-import { BusinessConnection, Campaign, StyleExample } from '../database/models/misc';
+import { BusinessConnection, Campaign, StyleExample, VoiceClip } from '../database/models/misc';
 import type { AppContext } from '../services/appContext';
 import { SETTINGS_BY_KEY, SETTINGS_SPEC } from '../services/settingsSpec';
 import { formatLeadCard } from '../leads/leadCard';
@@ -32,9 +32,13 @@ const HELP = `<b>TEMUR.FIT AI-yordamchi — admin</b>
 
 <b>Uslub</b>
 Chat eksportini (.html / .json / .txt) shu yerga yuboring → anonim namunalar
-Ovozli xabar yuboring → transkript uslub manbaiga qo'shiladi
+Audio fayl yoki #uslub caption'li ovoz → uslub manbaiga qo'shiladi
 /style — uslub profili · /style_rebuild — profilni qayta yaratish
 /examples — namunalar soni · /examples_clear — hammasini o'chirish
+
+<b>Ovozlar</b>
+Botga ovozli xabar yuboring → saqlanadi, AI mos vaziyatda mijozga yuboradi (narx, guruh qanday ishlaydi…)
+/voices — ro'yxat · caption'da #uslub — faqat uslub namunasi
 
 <b>Manbalar</b>
 /campaigns · /campaign_add &lt;kod&gt; &lt;manba&gt; · /campaign_del &lt;kod&gt;
@@ -315,9 +319,92 @@ export function registerAdminHandlers(bot: Bot, app: AppContext): void {
     }
   });
 
-  admin.on(['message:voice', 'message:audio'], async (ctx) => {
-    const v = ctx.message.voice ?? ctx.message.audio!;
-    await reply(ctx, '⏳ Transkripsiya...');
+  // ── voice library: a voice message sent to the bot is stored and later sent to clients by the AI ──
+  const awaitingVoiceTitle = new Map<number, string>(); // adminId → clip id waiting for a short title
+  admin.on('message:voice', async (ctx) => {
+    const v = ctx.message.voice;
+    const caption = (ctx.message.caption ?? '').trim();
+    if (/#uslub/i.test(caption)) {
+      // old behaviour on request: only a speaking-style sample
+      const text = await app.ai.transcribe(await app.gateway.downloadFile(v.file_id), v.mime_type ?? 'audio/ogg').catch(() => '');
+      if (text) await app.settings.set({ voice_style_notes: `${await app.settings.get('voice_style_notes')}\n\n${text}`.trim().slice(-20000) });
+      return reply(ctx, text ? "✅ Uslub manbaiga qo'shildi." : "❌ Matnga aylantirib bo'lmadi.");
+    }
+    const existing = await VoiceClip.findOne({ fileUniqueId: v.file_unique_id });
+    if (existing) return reply(ctx, `Bu ovoz allaqachon saqlangan: <b>${escapeHtml(existing.title || 'nomsiz')}</b>`);
+    const clip = await VoiceClip.create({
+      fileId: v.file_id,
+      fileUniqueId: v.file_unique_id,
+      mimeType: v.mime_type,
+      duration: v.duration,
+      title: caption.slice(0, 80),
+    });
+    await reply(ctx, '⏳ Saqlandi, matnga aylantiryapman...');
+    const transcript = await app.ai.transcribe(await app.gateway.downloadFile(v.file_id), v.mime_type ?? 'audio/ogg').catch(() => '');
+    clip.transcript = transcript.slice(0, 4000);
+    await clip.save();
+    const shortId = String(clip._id).slice(-6);
+    if (!clip.title) awaitingVoiceTitle.set(ctx.from.id, String(clip._id));
+    await reply(
+      ctx,
+      `🎙 Ovoz saqlandi (<code>${shortId}</code>, ${v.duration} s).\n` +
+        (transcript ? `Matni: <i>${escapeHtml(truncate(transcript, 800))}</i>\n\n` : "Matnga aylantirib bo'lmadi — nomini aniq yozing.\n\n") +
+        (clip.title
+          ? `Nomi: <b>${escapeHtml(clip.title)}</b>. AI uni mos vaziyatda mijozlarga yuboradi.`
+          : "Bu ovoz nima haqida? Qisqa nom yozing (masalan: <i>narx</i>, <i>guruh qanday ishlaydi</i>, <i>taklif</i>). /skip — matnning o'zi yetadi."),
+    );
+  });
+
+  admin.command('skip', async (ctx) => {
+    awaitingVoiceTitle.delete(ctx.from!.id);
+    await reply(ctx, 'Hop, nomsiz qoldi — AI ovoz matniga qarab tanlaydi.');
+  });
+
+  admin.command('voices', async (ctx) => {
+    const list = await VoiceClip.find().sort({ createdAt: 1 }).lean();
+    if (!list.length) return reply(ctx, "🎙 Ovozlar yo'q. Botga ovozli xabar yuboring — saqlanadi va AI mijozlarga mos vaziyatda yuboradi.");
+    const lines = list.map(
+      (c) =>
+        `${c.enabled ? '🟢' : '⚪️'} <code>${String(c._id).slice(-6)}</code> <b>${escapeHtml(c.title || 'nomsiz')}</b> · ${c.duration ?? '?'} s · ${c.sentCount} marta yuborilgan\n<i>${escapeHtml(truncate(c.transcript || c.description || '', 120))}</i>`,
+    );
+    await reply(ctx, `🎙 <b>Ovozlar</b>\n\n${lines.join('\n\n')}\n\n/voice_title &lt;id&gt; &lt;nom&gt; · /voice_test &lt;id&gt; · /voice_off &lt;id&gt; · /voice_on &lt;id&gt; · /voice_del &lt;id&gt;`);
+  });
+
+  const findClip = async (arg?: string) => {
+    const id = arg?.trim().split(/\s+/)[0];
+    if (!id) return null;
+    const all = await VoiceClip.find();
+    return all.find((c) => String(c._id).endsWith(id)) ?? null;
+  };
+  admin.command('voice_title', async (ctx) => {
+    const clip = await findClip(ctx.match);
+    if (!clip) return reply(ctx, 'Topilmadi. /voices');
+    clip.title = (ctx.match ?? '').trim().split(/\s+/).slice(1).join(' ').slice(0, 80);
+    await clip.save();
+    await reply(ctx, `✅ Nomi: ${escapeHtml(clip.title)}`);
+  });
+  admin.command('voice_test', async (ctx) => {
+    const clip = await findClip(ctx.match);
+    if (!clip) return reply(ctx, 'Topilmadi. /voices');
+    await app.gateway.sendAdminVoice(ctx.chat.id, clip.fileId, clip.title || undefined);
+  });
+  admin.command(['voice_off', 'voice_on'], async (ctx) => {
+    const clip = await findClip(ctx.match);
+    if (!clip) return reply(ctx, 'Topilmadi. /voices');
+    clip.enabled = ctx.message?.text?.startsWith('/voice_on') ?? false;
+    await clip.save();
+    await reply(ctx, clip.enabled ? '🟢 Yoqildi' : "⚪️ O'chirildi (AI yubormaydi)");
+  });
+  admin.command('voice_del', async (ctx) => {
+    const clip = await findClip(ctx.match);
+    if (!clip) return reply(ctx, 'Topilmadi. /voices');
+    await clip.deleteOne();
+    await reply(ctx, "🗑 O'chirildi");
+  });
+
+  admin.on('message:audio', async (ctx) => {
+    const v = ctx.message.audio;
+    await reply(ctx, "ℹ️ Bu audio fayl. Mijozlarga yuboriladigan ovoz uchun Telegram'da mikrofon bilan <b>ovozli xabar</b> yozib yuboring. Bu fayl uslub manbaiga qo'shiladi.\n⏳ Transkripsiya...");
     try {
       const text = await app.ai.transcribe(await app.gateway.downloadFile(v.file_id), v.mime_type ?? 'audio/ogg');
       const prev = await app.settings.get('voice_style_notes');
@@ -326,6 +413,16 @@ export function registerAdminHandlers(bot: Bot, app: AppContext): void {
     } catch (err) {
       await reply(ctx, `❌ ${escapeHtml((err as Error).message.slice(0, 200))}`);
     }
+  });
+
+  admin.on('message:text', async (ctx, next) => {
+    const clipId = awaitingVoiceTitle.get(ctx.from.id);
+    if (clipId && !ctx.message.text.startsWith('/')) {
+      awaitingVoiceTitle.delete(ctx.from.id);
+      await VoiceClip.updateOne({ _id: clipId }, { $set: { title: ctx.message.text.trim().slice(0, 80) } });
+      return reply(ctx, `✅ Nomi saqlandi: <b>${escapeHtml(ctx.message.text.trim().slice(0, 80))}</b>. AI uni mos vaziyatda yuboradi.`);
+    }
+    return next();
   });
 
   admin.on('message:text', async (ctx) => {

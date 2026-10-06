@@ -3,7 +3,8 @@ import { run, type RunnerHandle } from '@grammyjs/runner';
 import { assertProductionEnv, env } from './config/env';
 import { connectDatabase, disconnectDatabase } from './database/connection';
 import { SettingsService } from './services/settings';
-import { GeminiClient } from './ai/geminiClient';
+import { seedDefaultExamples } from './style/seedExamples';
+import { createLlmClient } from './ai/createLlmClient';
 import { AiService } from './ai/aiService';
 import { createBot, ALLOWED_UPDATES } from './telegram/bot';
 import { GrammyGateway } from './telegram/grammyGateway';
@@ -22,10 +23,11 @@ async function main() {
   await connectDatabase(env.MONGODB_URI);
 
   const settings = new SettingsService();
+  await seedDefaultExamples();
   const migrated = await settings.migrateLegacyDefaults();
   if (migrated.length) logger.info({ keys: migrated }, 'Old default settings replaced with new defaults');
   const ai = new AiService(
-    new GeminiClient({ apiKey: env.LLM_API_KEY, model: env.LLM_MODEL, baseUrl: env.LLM_BASE_URL, timeoutMs: env.LLM_TIMEOUT_MS }),
+    createLlmClient(env),
     settings,
     { maxConcurrency: env.LLM_MAX_CONCURRENCY },
   );
@@ -85,6 +87,9 @@ async function main() {
     runner = run(bot, { runner: { fetch: { allowed_updates: [...ALLOWED_UPDATES] } }, sink: { concurrency: 50 } });
     logger.info('Long polling mode (concurrent runner)');
   }
+
+  // after a restart: messages that arrived while the bot was down / waiting are answered with the full stored context
+  void engine.retryPending(0).catch((err) => logger.error({ err: (err as Error).message }, 'Startup retry failed'));
 
   // background jobs: reminders + retry of AI failures / unfinished processing after restarts
   const jobs = [

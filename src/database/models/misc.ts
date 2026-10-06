@@ -90,3 +90,24 @@ const AdminEventSchema = new Schema(
   { timestamps: true, collection: 'admin_events' },
 );
 export const AdminEvent = model('AdminEvent', AdminEventSchema);
+
+/**
+ * Pre-recorded voice messages of the coach (offer, price, how the group works…).
+ * The admin sends them to the bot; the AI picks the right one during the conversation.
+ */
+const VoiceClipSchema = new Schema(
+  {
+    fileId: { type: String, required: true },
+    fileUniqueId: { type: String, index: true },
+    mimeType: String,
+    duration: Number,
+    title: { type: String, default: '' },
+    description: { type: String, default: '' },
+    transcript: { type: String, default: '' },
+    enabled: { type: Boolean, default: true },
+    sentCount: { type: Number, default: 0 },
+  },
+  { timestamps: true, collection: 'voice_clips' },
+);
+export type VoiceClipData = InferSchemaType<typeof VoiceClipSchema>;
+export const VoiceClip = model('VoiceClip', VoiceClipSchema);

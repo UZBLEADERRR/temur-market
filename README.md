@@ -1,3 +1,56 @@
+# TEMUR.FIT — 2-bot: anketa + tabiiy sotuv (branch `bot2`)
+
+> Bu **ikkinchi bot**. Birinchi bot (faqat 5 savol) `main` branchda, bu esa `bot2` branchda. Ular aralashmaydi: alohida Railway servisi, alohida bot tokeni, alohida MongoDB bazasi (`temur_bot2`) ishlatiladi.
+
+## 2-botning farqi
+
+- **AI:** Gemini 3.8 Flash, **OpenRouter** orqali (`LLM_PROVIDER=openrouter`, `OPENROUTER_API_KEY`, `LLM_MODEL=google/gemini-3.8-flash`).
+- **Oqim:**
+  1. 5 ta savol (bo'y/vazn/yosh/tajriba, maqsad, haftasiga necha kun, oldin nima sinab ko'rgan va nega ishlamagan, sog'liq).
+  2. "Nega aynan hozir? Qaroringiz qat'iymi?" savoli.
+  3. Taklif: 50 kunlik yopiq guruh, ratsion va plan, nazorat.
+  4. "Qayerdasiz?" so'raladi, keyin narx.
+  5. E'tirozlarga javob → to'lov ma'lumoti → chek → **SOTILDI** (bot to'xtaydi, siz guruh linkini yuborasiz).
+- **Ovozli xabarlar kutubxonasi:**
+  - Botga Telegram'da ovozli xabar yuborasiz. U saqlanadi, matnga aylantiriladi va bot qisqa nom so'raydi (masalan: "narx", "guruh qanday ishlaydi").
+  - AI suhbatga qarab mos ovozni o'zi tanlaydi va mijozga sizning akkauntingizdan, "ovoz yozmoqda…" holatidan keyin yuboradi.
+  - Bitta mijozga bitta ovoz faqat bir marta ketadi.
+  - Boshqaruv: `/voices` va mini ilovadagi "🎙 Ovozlar" bo'limi (nom, izoh, yoqish/o'chirish, botda eshitish).
+- **Siz yozsangiz:** AI `coach_pause_minutes` (standart 30) daqiqa jim turadi va aralashmaydi. Keyin sizning gaplaringizni hisobga olib davom etadi.
+- **Kontekst:**
+  - Restartdan keyin javobsiz qolgan xabarlarga bot darhol, bazadagi butun tarix bilan javob beradi.
+  - Mijoz eski xabarga reply qilsa, iqtibos ham kontekstga qo'shiladi va bot salomdan qayta boshlamaydi.
+- **Tabiiy matn:**
+  - Bir javobda ko'pi bilan 2 ta xabar (`max_messages_per_turn`).
+  - Har yuborishdan oldin "AI slop" filtri ishlaydi: "Ajoyib savol", "Albatta!", markdown, ro'yxat va uzun tire (—) olib tashlanadi, emoji ko'pi bilan bitta qoladi.
+- **Namuna suhbat:** PDF dagi GPT suhbati Temur uslubida qayta yozildi (`docs/suhbat_namuna_tabiiy.md`). U botga standart namuna sifatida qo'shiladi.
+- **Kurs ma'lumotlari** (PDF dan, mini ilovada o'zgartiriladi):
+  - Narxlar: Koreya 150,000 KRW, O'zbekiston 1,000,000 so'm, boshqa chet el 1,200,000 so'm.
+  - Shartlar: to'lov oldindan; qoida buzilsa qaytarilmaydi.
+  - **To'lov ma'lumoti** (karta) maydonini o'zingiz to'ldirasiz.
+
+### 2-botni Railway'da ishga tushirish
+
+1. Railway → loyiha → **+ New → GitHub Repo** → `temur-market` → servis **Settings → Source → Branch: `bot2`**.
+2. **Variables:**
+   ```
+   TELEGRAM_BOT_TOKEN=<2-bot tokeni>
+   TELEGRAM_ADMIN_ID=<sizning ID>
+   TEMUR_TELEGRAM_ID=<test akkaunt ID, keyin Temurniki>
+   OPENROUTER_API_KEY=<openrouter.ai/keys>
+   LLM_MODEL=google/gemini-3.8-flash
+   MONGODB_URI=${{MongoDB.MONGO_URL}}/temur_bot2?authSource=admin
+   ```
+   Baza nomi `temur_bot2` bo'lsin, shunda 1-bot ma'lumotlari bilan aralashmaydi.
+3. **Settings → Networking → Generate Domain**, Replicas = 1.
+4. Test akkauntda: Telegram Business → Chatbots → 2-botni ulang.
+5. Botda `/start` bosing, keyin `/status` ni tekshiring.
+6. Ovozli takliflarni botga yuboring. "To'lov ma'lumoti" ni mini ilovada to'ldiring.
+
+Testdan keyin 2-botni Temurning akkauntiga ulash: Temurning akkauntida Chatbots bo'limida 1-bot o'rniga 2-botni tanlaysiz. Bir akkauntga bir vaqtda faqat bitta bot ulanadi.
+
+---
+
 # TEMUR.FIT — Telegram AI-yordamchi (lead anketasi)
 
 Instagram reklamasidan kelgan mijoz Temurning Telegram akkauntiga yozadi. Bot Telegram Business orqali **Temur nomidan va uning uslubida** 5 ta savol beradi. Javoblar yig'ilgach «Tushunarli» deb yozadi va shu chatda butunlay to'xtaydi. Shundan keyin Temur lead kartochkasini oladi va suhbatni o'zi davom ettiradi.

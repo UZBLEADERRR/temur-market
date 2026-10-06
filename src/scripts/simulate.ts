@@ -9,7 +9,7 @@ import { env } from '../config/env';
 import { connectDatabase } from '../database/connection';
 import { SettingsService } from '../services/settings';
 import { AiService } from '../ai/aiService';
-import { GeminiClient } from '../ai/geminiClient';
+import { createLlmClient } from '../ai/createLlmClient';
 import { LlmError, type LlmClient } from '../ai/llmClient';
 import { ConversationEngine } from '../conversations/engine';
 import { LeadService } from '../leads/leadService';
@@ -40,6 +40,11 @@ class PrintGateway implements TelegramGateway {
     return { messageId: Math.floor(Math.random() * 1e6) };
   }
   async sendTyping() {}
+  async sendBusinessVoice(_c: string, _chat: number, fileId: string) {
+    console.log(`   🎙 Temur(AI) ovoz: ${fileId.slice(0, 12)}…`);
+    return { messageId: Math.floor(Math.random() * 1e6) };
+  }
+  async sendAdminVoice() {}
   async notifyAdmins(html: string) {
     console.log(`   📮 ADMIN: ${html.replace(/<[^>]+>/g, '').split('\n').slice(0, 3).join(' | ')}`);
     return [];
@@ -55,7 +60,7 @@ async function main() {
   await connectDatabase(env.MONGODB_URI);
   const only = process.argv[2]?.toUpperCase();
   const settings = new SettingsService();
-  const real = new GeminiClient({ apiKey: env.LLM_API_KEY, model: env.LLM_MODEL, baseUrl: env.LLM_BASE_URL, timeoutMs: env.LLM_TIMEOUT_MS });
+  const real = createLlmClient(env);
   let failing = false;
   const client: LlmClient = { generate: (r) => (failing ? Promise.reject(new LlmError('simulated outage', true)) : real.generate(r)) };
   const ai = new AiService(client, settings, { retryDelaysMs: [500, 1000] });

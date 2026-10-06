@@ -82,6 +82,12 @@ export function registerBusinessHandlers(bot: Bot, app: AppContext): void {
       kind: kindOf(m),
       voice: voice ? { fileId: voice.file_id, mimeType: voice.mime_type } : undefined,
       photo: photo ? { fileId: photo.file_id } : undefined,
+      replyTo: m.reply_to_message
+        ? {
+            text: (m.reply_to_message.text ?? m.reply_to_message.caption ?? (m.reply_to_message.voice ? '[ovozli xabar]' : '')).slice(0, 500),
+            fromCoach: m.reply_to_message.from?.id !== m.chat.id,
+          }
+        : undefined,
       date: new Date(m.date * 1000),
     });
   });

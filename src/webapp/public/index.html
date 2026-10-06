@@ -79,6 +79,7 @@
     <button data-tab="coach">🧑‍🏫 Murabbiy haqida</button>
     <button data-tab="settings">⚙️ Sozlamalar</button>
     <button data-tab="style">✍️ Uslub</button>
+    <button data-tab="voices">🎙 Ovozlar</button>
     <button data-tab="sources">📍 Manbalar</button>
   </nav>
 </header>
@@ -136,6 +137,12 @@
     <div id="examplesList"></div>
   </section>
 
+  <section id="tab-voices" class="hidden">
+    <h2>Ovozli xabarlar</h2>
+    <p class="muted">Botga Telegram'da ovozli xabar yuboring — shu yerda paydo bo'ladi. Har biriga aniq nom bering (masalan: «narx», «guruh qanday ishlaydi», «taklif»). AI suhbatga qarab mosini o'zi tanlaydi va mijozga sizning akkauntingizdan yuboradi. Bitta mijozga bitta ovoz bir marta ketadi.</p>
+    <div id="voicesList"></div>
+  </section>
+
   <section id="tab-sources" class="hidden">
     <h2>Reklama manbalari</h2>
     <p class="muted">Har bir Instagram video uchun Telegram Business → Chat links da alohida link yarating va tayyor xabarga kodni qo'shing, masalan «Salom! #v3». Bot kodni topib manbani saqlaydi va mijozga ko'rsatmaydi.</p>
@@ -188,6 +195,7 @@ function showTab(name) {
   if (name === 'coach' || name === 'settings') loadSettings();
   if (name === 'style') loadExamples();
   if (name === 'sources') loadSources();
+  if (name === 'voices') loadVoices();
   if (tg) { name === 'lead' ? tg.BackButton.show() : tg.BackButton.hide(); }
 }
 document.querySelectorAll('#tabs button').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab)));
@@ -381,6 +389,32 @@ $('rebuildBtn').onclick = async () => {
   toast('Yaratilmoqda... (30 soniyagacha)');
   try { await api('/style/rebuild', { method: 'POST' }); toast('Uslub profili yangilandi ✅'); } catch (e) { toast(e.message); }
 };
+
+// ── voices ──
+async function loadVoices() {
+  const list = await api('/voices');
+  $('voicesList').innerHTML = list.length ? list.map((v) => `
+    <div class="card" style="${v.enabled ? '' : 'opacity:.55'}">
+      <div class="row" style="justify-content:space-between"><b>🎙 ${esc(v.title || 'nomsiz')}</b><span class="muted">${v.duration || '?'} s · ${v.sentCount} marta yuborilgan</span></div>
+      <label>Nomi</label><input data-vt="${v.id}" value="${esc(v.title || '')}" placeholder="masalan: narx">
+      <label>Qachon yuborilsin / izoh (ixtiyoriy)</label><input data-vd="${v.id}" value="${esc(v.description || '')}" placeholder="masalan: mijoz narxni so'raganda">
+      <label>Matni</label><div class="muted">${esc(v.transcript || '—')}</div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn" data-vsave="${v.id}">💾 Saqlash</button>
+        <button class="btn secondary" data-vtest="${v.id}">▶️ Botda eshitish</button>
+        <button class="btn secondary" data-ven="${v.id}" data-on="${v.enabled ? 0 : 1}">${v.enabled ? "O'chirish" : 'Yoqish'}</button>
+        <button class="btn danger" data-vdel="${v.id}">🗑</button>
+      </div>
+    </div>`).join('') : '<p class="muted">Hali ovoz yo\'q.</p>';
+  document.querySelectorAll('[data-vsave]').forEach((b) => b.onclick = async () => {
+    const id = b.dataset.vsave;
+    await api('/voices/' + id, { method: 'PATCH', body: { title: document.querySelector(`[data-vt="${id}"]`).value, description: document.querySelector(`[data-vd="${id}"]`).value } });
+    toast('Saqlandi');
+  });
+  document.querySelectorAll('[data-vtest]').forEach((b) => b.onclick = async () => { await api('/voices/' + b.dataset.vtest + '/test', { method: 'POST' }); toast('Botga yuborildi'); });
+  document.querySelectorAll('[data-ven]').forEach((b) => b.onclick = async () => { await api('/voices/' + b.dataset.ven, { method: 'PATCH', body: { enabled: b.dataset.on === '1' } }); loadVoices(); });
+  document.querySelectorAll('[data-vdel]').forEach((b) => b.onclick = async () => { if (confirm("O'chirilsinmi?")) { await api('/voices/' + b.dataset.vdel, { method: 'DELETE' }); loadVoices(); } });
+}
 
 // ── sources ──
 async function loadSources() {

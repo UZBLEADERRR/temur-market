@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import { Types } from 'mongoose';
 import { Lead } from '../database/models/Lead';
 import { Message } from '../database/models/Message';
-import { AdminEvent, Campaign, StyleExample } from '../database/models/misc';
+import { AdminEvent, Campaign, StyleExample, VoiceClip } from '../database/models/misc';
 import type { AppContext } from '../services/appContext';
 import { SETTINGS_SPEC } from '../services/settingsSpec';
 import { exportXlsx, getDailyStats, getQueue } from '../admin/adminQueries';
@@ -292,6 +292,55 @@ export function createWebApp(app: AppContext, extra?: (e: express.Express) => vo
       } catch (err) {
         res.status(502).json({ error: (err as Error).message.slice(0, 200) });
       }
+    }),
+  );
+
+  // ── voice library ──
+  api.get(
+    '/voices',
+    asyncH(async (_req, res) => {
+      const list = await VoiceClip.find().sort({ createdAt: 1 }).lean();
+      res.json(list.map((c) => ({ ...c, id: String(c._id), shortId: String(c._id).slice(-6), fileId: undefined, fileUniqueId: undefined })));
+    }),
+  );
+  api.patch(
+    '/voices/:id',
+    asyncH(async (req, res) => {
+      const $set: Record<string, unknown> = {};
+      if (typeof req.body?.title === 'string') $set.title = req.body.title.slice(0, 80);
+      if (typeof req.body?.description === 'string') $set.description = req.body.description.slice(0, 1000);
+      if (typeof req.body?.enabled === 'boolean') $set.enabled = req.body.enabled;
+      await VoiceClip.updateOne({ _id: req.params.id }, { $set });
+      res.json({ ok: true });
+    }),
+  );
+  api.delete(
+    '/voices/:id',
+    asyncH(async (req, res) => {
+      await VoiceClip.deleteOne({ _id: req.params.id });
+      res.json({ ok: true });
+    }),
+  );
+  /** Plays a clip inside the mini app (streams the Telegram file). */
+  api.get(
+    '/voices/:id/audio',
+    asyncH(async (req, res) => {
+      const clip = await VoiceClip.findById(req.params.id).lean();
+      if (!clip) return res.status(404).end();
+      const buf = await app.gateway.downloadFile(clip.fileId);
+      res.setHeader('content-type', clip.mimeType || 'audio/ogg');
+      res.setHeader('cache-control', 'private, max-age=3600');
+      res.end(buf);
+    }),
+  );
+  /** Sends the clip to the admin's chat with the bot (reliable playback on every phone). */
+  api.post(
+    '/voices/:id/test',
+    asyncH(async (req, res) => {
+      const clip = await VoiceClip.findById(req.params.id).lean();
+      if (!clip || !req.adminId) return res.status(404).json({ error: 'not found' });
+      await app.gateway.sendAdminVoice(req.adminId, clip.fileId, clip.title || undefined);
+      res.json({ ok: true });
     }),
   );
 

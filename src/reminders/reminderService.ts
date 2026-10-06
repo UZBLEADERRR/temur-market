@@ -21,7 +21,12 @@ export class ReminderService {
 
   async tick(now = new Date()): Promise<number> {
     // planned «o'ylab ko'raman» follow-ups first
-    const due = await Lead.find({ followUpAt: { $ne: null, $lte: now }, mode: 'AI', status: 'SALES' }).select('_id').limit(50).lean();
+    const due = await Lead.find({
+      followUpAt: { $ne: null, $lte: now },
+      mode: 'AI',
+      status: 'SALES',
+      $or: [{ aiPausedUntil: null }, { aiPausedUntil: { $lte: now } }],
+    }).select('_id').limit(50).lean();
     let followUps = 0;
     for (const l of due) if (await this.engine.followUp(String(l._id))) followUps++;
 
@@ -33,6 +38,7 @@ export class ReminderService {
       remindersSent: { $lt: 2 },
       pendingSince: null,
       followUpAt: null,
+      $or: [{ aiPausedUntil: null }, { aiPausedUntil: { $lte: now } }],
       lastOutgoingAt: { $ne: null, $lte: new Date(now.getTime() - r1) },
       lastClientMessageAt: { $ne: null, $gte: new Date(now.getTime() - WINDOW_MS) },
     }).limit(100);

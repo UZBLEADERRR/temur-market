@@ -13,6 +13,8 @@ const AnswersSchema = new Schema(
     trainingLocation: String,
     previousAttempts: String,
     healthProblems: String,
+    country: String,
+    motivation: String,
   },
   { _id: false },
 );
@@ -77,6 +79,10 @@ const LeadSchema = new Schema(
     followUpAt: Date,
     followUpNote: String,
     followUpsSent: { type: Number, default: 0 },
+    /** The coach is writing himself — the AI stays silent in this chat until this time. */
+    aiPausedUntil: Date,
+    commitmentAsked: { type: Boolean, default: false },
+    sentVoiceIds: { type: [String], default: [] },
     answeredAt: Date,
     paidAt: Date,
     rejectedAt: Date,

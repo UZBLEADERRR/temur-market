@@ -29,6 +29,8 @@ export interface LeadAnswers {
   trainingLocation?: string;
   previousAttempts?: string;
   healthProblems?: string;
+  country?: string;
+  motivation?: string;
 }
 
 /** Questionnaire step that still needs an answer; 6 means everything is collected. */

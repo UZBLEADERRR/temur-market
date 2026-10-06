@@ -34,14 +34,24 @@ export const SETTINGS_SPEC: SettingDef[] = [
     group: 'Murabbiy',
     type: 'longtext',
     default:
-      "Onlayn kurs: individual ratsion va trenirovka dasturi, har kuni nazorat, ovqatlar guruhga tashlab boriladi, har 10 kunda vazn va progress rasm. Zalda ham, uyda ham ishlasa bo'ladi.",
+      `50 kunlik yopiq guruh, nazorat bilan ishlaymiz.
+Mijozga shaxsiy ovqatlanish ratsioni va trenirovka plan tuzib beriladi.
+Har kuni 3 mahal ovqat rasmi guruhga tashlab boriladi, murabbiy nazorat qilib kamchiliklarni to'g'rilab boradi.
+Har 10 kunda tarozi nazorati (vazn), natijaga qarab ratsion yangilanadi.
+Shartlar qat'iy: 50 kun intizom bilan ishlash kerak. Qoida buzilsa 1 marta ogohlantirish, 2-marta buzilsa to'lov qaytarilmasdan guruhdan chiqariladi — chunki natija uchun nazorat va intizom kerak.
+50 kun davomida savollarga murabbiyning o'zi javob beradi (mahsulot topilmasa, tushunmagan joy bo'lsa — menga yozasiz).
+Zalda ham, uyda ham ishlasa bo'ladi.
+To'lov oldindan, bo'lib to'lash yo'q.`,
   },
   {
     key: 'price_list',
     label: 'Narxlar va tariflar (AI sotuvda aynan shuni aytadi)',
     group: 'Murabbiy',
     type: 'longtext',
-    default: '',
+    default: `Koreyadagilar uchun: 150,000 KRW
+O'zbekistondagilar uchun: 1,000,000 so'm
+Boshqa chet eldagilar uchun: 1,200,000 so'm
+(50 kun uchun; kuniga taxminan Koreyada 3,000 won, O'zbekistonda 20,000 so'm)`,
   },
   {
     key: 'payment_details',
@@ -50,13 +60,21 @@ export const SETTINGS_SPEC: SettingDef[] = [
     type: 'longtext',
     default: '',
   },
+  ...q(
+    'commitment_question',
+    "Sotuvdan oldingi oxirgi savol (qat'iylik)",
+    "Va oxirgi savol: nega aynan hozir bu ishga bel bog'layapsiz? Hozir boshlasak, jiddiy kirishishga qaroringiz qat'iymi?",
+    'И последний вопрос: почему решили взяться именно сейчас? Если начнём сейчас — готовы серьёзно включиться?',
+  ),
+  { key: 'ask_commitment', label: "Taklifdan oldin «nega aynan hozir?» savolini berish", group: 'Xulq', type: 'boolean', default: true },
+  { key: 'max_messages_per_turn', label: 'Bir javobda maksimum xabar soni (ko\'p xabar ishonchsiz ko\'rinadi)', group: 'Xulq', type: 'number', default: 2 },
   { key: 'max_sales_turns', label: "Sotuvda nechta javobdan keyin to'lovga aniq taklif qilinsin", group: 'Xulq', type: 'number', default: 4 },
   {
     key: 'coach_results',
     label: "O'quvchilar natijalari (AI faqat shulardan misol keltiradi)",
     group: 'Murabbiy',
     type: 'longtext',
-    default: "100 ga yaqin odam 40 kunlik tizimda yaxshi natija qilgan. Natija har kimning harakatiga bog'liq, kafolat berilmaydi.",
+    default: "100 ga yaqin odam shu tizimda yaxshi natija qilgan. Natija uchun ikki taraflama mas'uliyat: biz to'g'ri va ishlaydigan dastur beramiz, mijoz unga amal qiladi — shunda natija kuttirib qo'ymaydi.",
   },
   {
     key: 'sales_prompt',
@@ -77,7 +95,15 @@ Qanday sotish:
 9. Bazada to'lov ma'lumoti bo'lmasa: mijoz aniq rozi bo'lganda → action=SOLD, reason=agreed.
 10. Mijoz qat'iy rad etsa → action=REFUSED, iliq xayrlash, eshik ochiq qolsin («fikringiz o'zgarsa yozing»).
 11. Bazada yo'q chegirma yoki maxsus shart so'rasa yoki murabbiyning o'zini so'rasa → action=READY, reason=wants_coach.
-12. Hech qachon yolg'on shoshilinchlik («faqat bugun», «oxirgi joy») yaratma, agar bu bazada yozilmagan bo'lsa.`,
+12. Narx davlatga qarab farq qiladi: mijoz qayerda yashashini bilmasang, narxdan oldin oddiy so'ra («Koreyadamisiz yoki O'zbekistondami?»).
+13. Murabbiyning odatdagi javoblari (shu ruhda, o'z so'zing bilan):
+   - «qimmat» → «Nimaga nisbatan qimmat? Keling, hisoblaymiz» va kunlikka bo'lib ko'rsat;
+   - «kafolat bormi?» → ikki taraflama mas'uliyat: biz to'g'ri dastur beramiz, siz amal qilasiz — shunda natija bo'ladi;
+   - «savollarim bo'lsa kimga yozaman?» → «Menga.»;
+   - «bo'lib to'lasa bo'ladimi?» → «To'lov oldindan.»;
+   - «pul qaytariladimi?» → bazadagi shartni halol ayt (qoida buzilsa qaytarilmaydi); boshqa holat bo'yicha «buni o'zim alohida gaplashamiz».
+   Qisqa javoblar ham normal — har doim uzun tushuntirish shart emas.
+14. Hech qachon yolg'on shoshilinchlik («faqat bugun», «oxirgi joy») yaratma, agar bu bazada yozilmagan bo'lsa.`,
   },
   { key: 'system_prompt', label: 'System prompt', group: 'AI', type: 'longtext', default: DEFAULT_SYSTEM_PROMPT },
   { key: 'style_profile', label: 'Uslub profili', group: 'AI', type: 'longtext', default: DEFAULT_STYLE_PROFILE },
@@ -115,13 +141,13 @@ Qanday sotish:
     'q2_high',
     '2-savol, TMI ≥ yuqori chegara',
     'Maqsad nechiga tushish? Qancha vazn norma hisoblaysiz?',
-    'Цель — до скольки похудеть? Какой вес считаете нормой?',
+    'Цель: до скольки похудеть? Какой вес считаете нормой?',
   ),
   ...q(
     'q2_low',
     '2-savol, TMI < past chegara',
     'Maqsad massa olishmi? Necha kiloga chiqmoqchisiz?',
-    'Цель — набрать массу? До скольки кг хотите выйти?',
+    'Цель: набрать массу? До скольки кг хотите выйти?',
   ),
   ...q(
     'q2_mid',
@@ -138,7 +164,7 @@ Qanday sotish:
   ...q(
     'q4',
     '4-savol',
-    "Oldin harakat qilib ko'rganmisiz? Nima xalaqit bergan?",
+    "Formangizni o'zgartirish uchun oldin nimalarni sinab ko'rgansiz? Nega ishlamadi deb o'ylaysiz?",
     'Раньше пробовали? Что помешало?',
   ),
   ...q(
@@ -178,6 +204,13 @@ Qanday sotish:
   { key: 'sales_mode', label: "Anketadan keyin AI kursni oxirigacha sotsin (o'chiq = faqat 5 savol)", group: 'Xulq', type: 'boolean', default: true },
   { key: 'ai_after_sale', label: 'Sotuvdan keyin ham AI mijoz bilan yozishsin (murabbiy yordamchisi)', group: 'Xulq', type: 'boolean', default: true },
   { key: 'max_follow_ups', label: "«O'ylab ko'raman» dan keyin maksimum eslatma", group: 'Xulq', type: 'number', default: 2 },
+  {
+    key: 'coach_pause_minutes',
+    label: "Murabbiy yozgach AI necha daqiqa jim tursin (aralashmasligi uchun)",
+    group: 'Xulq',
+    type: 'number',
+    default: 30,
+  },
   {
     key: 'coach_message_stops_ai',
     label: "Murabbiy o'zi yozsa AI to'xtasin (o'chiq = AI murabbiy xabarini hisobga olib davom etadi)",

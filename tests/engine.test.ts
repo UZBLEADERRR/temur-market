@@ -231,7 +231,7 @@ describe('questionnaire flow', () => {
     await engine.handleClientMessage(clientMsg(25, 'Здравствуйте, хочу похудеть'));
     expect(gateway.textsTo(25)[0]).toBe('Здравствуйте! Можете коротко рассказать о себе? Рост, вес, возраст. Есть опыт тренировок?');
     await engine.handleClientMessage(clientMsg(25, 'Рост 175, вес 90, 30 лет, занимаюсь 2 года'));
-    expect(gateway.textsTo(25).at(-1)).toContain('Цель — до скольки похудеть? Какой вес считаете нормой?');
+    expect(gateway.textsTo(25).at(-1)).toContain('Цель: до скольки похудеть? Какой вес считаете нормой?');
     expect((await Lead.findOne({ chatId: 25 }))?.language).toBe('ru');
   });
 
@@ -526,7 +526,8 @@ describe('intent, photos, spam, always-on, reset', () => {
   });
 
   it('always-on: AI keeps answering after the questionnaire and after the coach writes', async () => {
-    const { engine, gateway, llm } = buildApp();
+    const { settings, engine, gateway, llm } = buildApp();
+    await settings.set({ coach_pause_minutes: 0 });
     await engine.handleClientMessage(clientMsg(86, 'Salom, kurs haqida'));
     await Lead.updateOne({ chatId: 86 }, { $set: { alwaysOn: true } });
     await engine.handleClientMessage(clientMsg(86, 'Temur bilan gaplashmoqchiman'));
@@ -624,7 +625,8 @@ describe('sales stage and coach messages', () => {
   });
 
   it("the coach's own message does not stop the AI; it is shown to the model as the coach's words", async () => {
-    const { engine, gateway, llm } = buildApp();
+    const { settings, engine, gateway, llm } = buildApp();
+    await settings.set({ coach_pause_minutes: 0 });
     await engine.handleClientMessage(clientMsg(93, 'Salom, kurs haqida'));
     await engine.handleCoachMessage({ connectionId: 'conn-1', chat: { id: 93 }, messageId: 7777, text: "Sizga 700 000 ga qilib beraman", kind: 'text' });
     expect((await Lead.findOne({ chatId: 93 }))?.mode).toBe('AI');
@@ -663,11 +665,12 @@ describe('sales funnel goes all the way to payment', () => {
     await settings.set({
       price_list: "Individual 50 kun — 800 000 so'm",
       payment_details: "Karta: 8600 1234 5678 9012\nTemur F.\nTo'lovdan keyin chekni yuboring",
+      ask_commitment: false,
     });
     llm.push(done);
     llm.push((req) => {
       const t = req.parts.at(-1)!.text!;
-      expect(t).toContain("KEYINGI QADAM: Anketadan sotuvga tabiiy o'tish");
+      expect(t).toContain('KEYINGI QADAM: Endi taklif');
       expect(t).toContain("NARXLAR: Individual 50 kun — 800 000 so'm");
       expect(t).toContain('«savollardan keyin aytaman» qoidalari AMAL QILMAYDI');
       expect(t).not.toContain('Bazada javobi yo\'q savolga');
@@ -711,7 +714,7 @@ describe('sales funnel goes all the way to payment', () => {
 
   it('the admin is warned when no price is configured', async () => {
     const { engine, gateway, llm, settings } = buildApp();
-    await settings.set({ course_info: 'Onlayn kurs' });
+    await settings.set({ course_info: 'Onlayn kurs', price_list: '' });
     llm.push(done, { messages: ['Taklif', 'Boshlaymizmi?'], action: 'ASK_NEXT' });
     await engine.handleClientMessage(clientMsg(97, 'Kurs: 180 95 25, hammasi'));
     expect(gateway.admin.some((a) => a.html.includes('Kurs narxi kiritilmagan'))).toBe(true);
@@ -870,5 +873,105 @@ describe('no double first message (screenshot: «Kurs»)', () => {
     expect(texts[1]).not.toMatch(/assalomu/i);
     expect(texts[1]).toContain("Bo'y, ves, yosh");
     expect(texts).toHaveLength(2);
+  });
+});
+
+describe('bot2: voices, coach pause, context after restart, human text', () => {
+  const done = {
+    messages: ['Rahmat!'],
+    action: 'READY',
+    reason: 'completed',
+    answered_current: true,
+    extracted: { trainingExperience: '1 yil', goal: 'ozish', targetWeight: 80, trainingDays: 3, trainingLocation: 'zal', previousAttempts: 'reja yo\'q', healthProblems: "yo'q" },
+  };
+
+  it('asks the «nega aynan hozir» question before the offer, then offers', async () => {
+    const { engine, gateway, llm } = buildApp();
+    llm.push(done);
+    llm.push((req) => {
+      expect(req.parts.at(-1)!.text).toContain('Hali taklif qilma');
+      return { messages: ["Oxirgi savol: nega aynan hozir boshlamoqchisiz?"], action: 'ASK_NEXT' };
+    });
+    await engine.handleClientMessage(clientMsg(120, 'Kurs: 175 82 24, hammasi'));
+    expect(gateway.textsTo(120).at(-1)).toContain('nega aynan hozir');
+    llm.push((req) => {
+      expect(req.parts.at(-1)!.text).toContain('Endi taklif');
+      return { messages: ["Demak asosiy muammo reja va nazorat yo'qligida"], action: 'ASK_NEXT', extracted: { motivation: 'bu safar jiddiy' } };
+    });
+    await engine.handleClientMessage(clientMsg(120, 'Bu safar jiddiyman'));
+    expect((await Lead.findOne({ chatId: 120 }))?.answers?.motivation).toBe('bu safar jiddiy');
+  });
+
+  it('the model picks a stored voice clip; it is sent once from the business account, after at most one text', async () => {
+    const { VoiceClip } = await import('../src/database/models/misc');
+    const clip = await VoiceClip.create({ fileId: 'VOICE_FILE', title: 'guruh qanday ishlaydi', transcript: '50 kun yopiq guruh...', duration: 40 });
+    const short = String(clip._id).slice(-6);
+    const { engine, gateway, llm } = buildApp();
+    llm.push(done, { messages: ['Oxirgi savol?'], action: 'ASK_NEXT' });
+    await engine.handleClientMessage(clientMsg(121, 'Kurs: 175 82 24, hammasi'));
+    llm.push((req) => {
+      expect(req.parts.at(-1)!.text).toContain(`${short}: guruh qanday ishlaydi`);
+      return { messages: ['Guruh qanday ishlashini ovozli aytib berdim', 'ikkinchi xabar', 'uchinchi'], action: 'ASK_NEXT', voice_id: short };
+    });
+    await engine.handleClientMessage(clientMsg(121, 'Jiddiyman'));
+    expect(gateway.voices).toEqual([{ chatId: 121, fileId: 'VOICE_FILE' }]);
+    expect(gateway.textsTo(121).at(-1)).toBe('Guruh qanday ishlashini ovozli aytib berdim');
+    const lead = await Lead.findOne({ chatId: 121 });
+    expect(lead?.sentVoiceIds).toContain(String(clip._id));
+    // the same clip is never sent twice to one client
+    llm.push((req) => {
+      expect(req.parts.at(-1)!.text).toContain('[yuborilgan]');
+      return { messages: ['Yana savol bormi?'], action: 'ASK_NEXT', voice_id: short };
+    });
+    await engine.handleClientMessage(clientMsg(121, 'Tushunarli'));
+    expect(gateway.voices).toHaveLength(1);
+  });
+
+  it('when the coach writes, the AI stays silent for the pause and answers after it with the coach in context', async () => {
+    let now = new Date('2026-10-06T10:00:00Z');
+    const { engine, gateway, llm, settings } = buildApp({ now: () => now });
+    await settings.set({ coach_pause_minutes: 30 });
+    await engine.handleClientMessage(clientMsg(122, 'Salom, kurs haqida', { date: now }));
+    await engine.handleCoachMessage({ connectionId: 'conn-1', chat: { id: 122 }, messageId: 9001, text: 'Salom, Temur', kind: 'text' });
+    const before = gateway.sent.length;
+    now = new Date(now.getTime() + 5 * 60_000);
+    await engine.handleClientMessage(clientMsg(122, '180 90 25 1 yil zal', { date: now }));
+    expect(gateway.sent.length).toBe(before); // paused
+    now = new Date(now.getTime() + 40 * 60_000);
+    llm.push((req) => {
+      expect(req.parts.at(-1)!.text).toContain("Temur (O'ZI yozgan): Salom, Temur");
+      return { messages: ['Maqsad nechiga tushish?'], action: 'ASK_NEXT', question: 2 };
+    });
+    await engine.retryPending(0);
+    expect(gateway.textsTo(122).at(-1)).toContain('Maqsad');
+  });
+
+  it('a reply to an old message in an unknown chat continues the conversation instead of greeting from scratch', async () => {
+    const { engine, gateway, llm } = buildApp();
+    llm.push((req) => {
+      expect(req.parts.at(-1)!.text).toContain("Temur (O'ZI yozgan): Narxi 150 ming won");
+      return { messages: ["Ha aka, 150 ming won. Boshlaymizmi?"], action: 'ASK_NEXT' };
+    });
+    await engine.handleClientMessage(clientMsg(123, 'Shuni olsam bo\'ladimi', { replyTo: { text: 'Narxi 150 ming won', fromCoach: true } }));
+    const texts = gateway.textsTo(123);
+    expect(texts.some((t) => t.startsWith('Assalomu alaykum!'))).toBe(false);
+  });
+
+  it('pending messages are answered right after a restart (startup catch-up)', async () => {
+    const { engine: first } = buildApp();
+    await first.handleClientMessage(clientMsg(124, 'Salom, kurs haqida'));
+    const lead = await Lead.findOne({ chatId: 124 });
+    await Message.create({ leadId: lead!._id, sender: 'client', direction: 'incoming', text: '180 90 25 1 yil zal', processed: false });
+    await Lead.updateOne({ _id: lead!._id }, { $set: { pendingSince: new Date() } });
+    const { engine: restarted, gateway } = buildApp(); // new process, no timers
+    await restarted.retryPending(0);
+    expect(gateway.textsTo(124).length).toBe(1);
+  });
+
+  it('AI slop is removed before sending', async () => {
+    const { humanize } = await import('../src/utils/humanize');
+    expect(humanize('Ajoyib savol! **Kurs** 50 kunlik — har kuni nazorat 💪🔥🎉')).toBe('**Kurs** 50 kunlik - har kuni nazorat 💪'.replace('**Kurs**', 'Kurs'));
+    expect(humanize('- birinchi\n- ikkinchi')).toBe('Birinchi\nikkinchi');
+    expect(humanize('Albatta! Boshlaymiz')).toBe('Boshlaymiz');
   });
 });

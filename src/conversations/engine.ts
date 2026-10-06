@@ -1,7 +1,7 @@
 import { Types } from 'mongoose';
 import { Lead, type LeadDoc } from '../database/models/Lead';
 import { Message } from '../database/models/Message';
-import { AdminEvent, Reminder } from '../database/models/misc';
+import { AdminEvent, Reminder, VoiceClip } from '../database/models/misc';
 import type { AiService } from '../ai/aiService';
 import { buildSystem, buildUserText } from '../ai/promptBuilder';
 import { stripMarkers, type AiResponse } from '../ai/responseSchema';
@@ -17,6 +17,7 @@ import { isChatClosedError, type TelegramGateway } from '../telegram/gateway';
 import type { LeadAnswers, LeadStatus, QuestionStep, ReadyReason } from '../types/domain';
 import { containsAny, detectLanguage, escapeHtml, fillTemplate, isGreetingOnly, normalize, splitKeywords, type Lang } from '../utils/text';
 import { KeyedMutex } from '../utils/limiter';
+import { humanize } from '../utils/humanize';
 import { formatLocal, HOUR, parseLocal, sleep, zonedParts } from '../utils/time';
 import { logger } from '../utils/logger';
 
@@ -35,6 +36,8 @@ export interface IncomingClientMessage {
   kind: 'text' | 'voice' | 'photo' | 'video' | 'sticker' | 'other';
   voice?: { fileId: string; mimeType?: string };
   photo?: { fileId: string };
+  /** The client replied to an earlier message (possibly from before the bot knew this chat). */
+  replyTo?: { text: string; fromCoach: boolean };
   date?: Date;
 }
 
@@ -101,6 +104,21 @@ export class ConversationEngine {
       });
       text = detected.cleanedText;
       logger.info({ leadId: String(lead._id), source: detected.source }, 'New lead created');
+      if (msg.replyTo?.text) {
+        // a reply to an older message means the conversation already exists (e.g. started before the bot):
+        // keep that context and continue instead of greeting from scratch
+        lead.status = 'QUESTIONNAIRE';
+        lead.intent = 'course';
+        lead.lastAskedStep = 0;
+        await Message.create({
+          leadId: lead._id,
+          telegramId: msg.chat.id,
+          direction: msg.replyTo.fromCoach ? 'outgoing' : 'incoming',
+          sender: msg.replyTo.fromCoach ? 'temur' : 'client',
+          text: msg.replyTo.text,
+          meta: { quoted: true },
+        });
+      }
     } else {
       // keep profile fresh
       lead.username = msg.chat.username ?? lead.username;
@@ -108,6 +126,7 @@ export class ConversationEngine {
       lead.lastName = msg.chat.last_name ?? lead.lastName;
     }
 
+    if (msg.replyTo?.text && text) text = `${text}\n(javob shu xabarga: «${msg.replyTo.text.slice(0, 200)}»)`;
     if (!text && msg.kind !== 'text' && msg.kind !== 'voice') {
       text = `[${msg.kind === 'photo' ? 'rasm' : msg.kind === 'video' ? 'video' : msg.kind === 'sticker' ? 'stiker' : 'fayl'}]`;
     }
@@ -138,7 +157,7 @@ export class ConversationEngine {
     await lead.save();
     logger.info({ leadId: String(lead._id), kind: msg.kind, active }, 'Incoming client message');
 
-    if (active) await this.scheduleAsync(String(lead._id), { first: isFirst, voice: msg.kind === 'voice' });
+    if (active) await this.scheduleAsync(String(lead._id), { first: isFirst, voice: msg.kind === 'voice', pausedUntil: lead.aiPausedUntil ?? undefined });
     return lead;
   }
 
@@ -182,6 +201,8 @@ export class ConversationEngine {
       await Message.updateMany({ leadId: lead._id, processed: false }, { $set: { processed: true } });
       lead.pendingSince = undefined;
       lead.lastOutgoingAt = this.now();
+      const pauseMin = await this.deps.settings.num('coach_pause_minutes');
+      if (pauseMin > 0) lead.aiPausedUntil = new Date(this.now().getTime() + pauseMin * 60_000);
       if (lead.status === 'READY') {
         lead.status = 'ANSWERED';
         lead.answeredAt ??= this.now();
@@ -216,11 +237,13 @@ export class ConversationEngine {
    * Waits until the client stops writing: every new message restarts the timer
    * (Telegram does not tell bots that a client is typing, so a quiet period is used instead).
    */
-  private async scheduleAsync(leadId: string, hint: { first?: boolean; voice?: boolean } = {}): Promise<void> {
+  private async scheduleAsync(leadId: string, hint: { first?: boolean; voice?: boolean; pausedUntil?: Date } = {}): Promise<void> {
     const s = this.deps.settings;
     const base = await s.num(hint.first ? 'debounce_first_seconds' : 'debounce_seconds');
     const extra = hint.voice ? await s.num('debounce_voice_extra_seconds') : 0;
-    const ms = this.opts.debounceMsOverride ?? (base + extra) * 1000;
+    let ms = this.opts.debounceMsOverride ?? (base + extra) * 1000;
+    const pauseLeft = hint.pausedUntil ? hint.pausedUntil.getTime() - this.now().getTime() : 0;
+    if (pauseLeft > 0 && this.opts.debounceMsOverride === undefined) ms = Math.max(ms, pauseLeft + 5_000);
     this.cancel(leadId);
     if (ms <= 0) {
       await this.process(leadId).catch((err) => logger.error({ err: (err as Error).message, leadId }, 'Process failed'));
@@ -255,6 +278,8 @@ export class ConversationEngine {
     const lead = await Lead.findById(leadId);
     if (!lead || !isAiActive(lead)) return;
     if (!(await this.deps.settings.bool('ai_enabled'))) return;
+    // the coach is talking to this client right now — do not interfere; picked up again after the pause
+    if (lead.aiPausedUntil && lead.aiPausedUntil.getTime() > this.now().getTime()) return;
 
     const pending = await Message.find({ leadId: lead._id, sender: 'client', processed: false }).sort({ createdAt: 1 });
     if (!pending.length) {
@@ -569,7 +594,9 @@ export class ConversationEngine {
       lead.lastAskedStep = after;
     }
     await lead.save();
-    await this.sendToClient(lead, out.slice(0, 3));
+    const voice = await this.pickVoice(lead, ai.voice_id);
+    await this.sendToClient(lead, trimMessages(out, voice ? 1 : await this.deps.settings.num('max_messages_per_turn')));
+    if (voice) await this.sendVoice(lead, voice);
     void this.maybeSummarize(lead).catch(() => undefined);
   }
 
@@ -628,6 +655,12 @@ export class ConversationEngine {
       salesDirective,
       nowLocal: formatLocal(this.now(), this.tz()),
       clientName: lead.firstName ?? undefined,
+      voices: (await VoiceClip.find({ enabled: true }).sort({ createdAt: 1 }).limit(30).lean()).map((v) => ({
+        id: String(v._id).slice(-6),
+        title: v.title || 'ovozli xabar',
+        summary: (v.description || v.transcript || '').replace(/\s+/g, ' ').slice(0, 220),
+        sent: (lead.sentVoiceIds ?? []).includes(String(v._id)),
+      })),
       soldContext: lead.readyReason === 'sold',
       priceList: salesMode ? await s.get('price_list') : undefined,
       paymentDetails: salesMode ? await s.get('payment_details') : undefined,
@@ -698,7 +731,8 @@ export class ConversationEngine {
     const s = this.deps.settings;
     const step = lead.salesStep ?? 0;
     const turns = lead.salesTurns ?? 0;
-    const directive = await this.salesDirective(step, turns);
+    const commitmentFirst = step === 0 && !lead.commitmentAsked && (await s.bool('ask_commitment'));
+    const directive = commitmentFirst ? await this.commitmentDirective(lang) : await this.salesDirective(step, turns);
     let ai: AiResponse;
     try {
       ai = await this.askAi(lead, plainAnswers(lead), 6, lead.bmi ?? undefined, lang, newMessages, 6, photoIds, false, true, directive);
@@ -730,7 +764,7 @@ export class ConversationEngine {
       return this.finishReady(lead, 'sold', false, out.length ? out.slice(0, 2) : [await s.text('ready_message', outLang)]);
     }
     if (ai.action === 'REFUSED') return this.finishReady(lead, 'refused', false, out.slice(0, 2));
-    if (ai.action === 'NO_RESPONSE' || !out.length) {
+    if (ai.action === 'NO_RESPONSE' || (!out.length && !ai.voice_id)) {
       await lead.save();
       return;
     }
@@ -739,11 +773,61 @@ export class ConversationEngine {
     const reachedPayment = (ai.sales_step ?? 0) >= 3;
     if (reachedPayment && payment && step < 3 && !containsPayment(out.join('\n'), payment)) out.push(payment);
     if (ai.follow_up_at) await this.planFollowUp(lead, ai.follow_up_at, ai.follow_up_note ?? '');
+    if (commitmentFirst) lead.commitmentAsked = true;
+    const ex = sanitizeExtracted(ai.extracted ?? {});
+    if (ex.country || ex.motivation) {
+      const answers = plainAnswers(lead);
+      if (ex.country) answers.country = ex.country;
+      if (ex.motivation && !answers.motivation) answers.motivation = ex.motivation;
+      lead.answers = answers as never;
+    }
     lead.salesStep = Math.max(step, Math.min(3, ai.sales_step ?? step));
     lead.salesTurns = turns + 1;
     await lead.save();
-    await this.sendToClient(lead, out.slice(0, 4));
+    const voice = await this.pickVoice(lead, ai.voice_id);
+    const limit = voice ? 1 : await s.num('max_messages_per_turn');
+    const withPayment = out.length && payment && out[out.length - 1] === payment;
+    const texts = withPayment ? [...trimMessages(out.slice(0, -1), limit), payment] : trimMessages(out, limit);
+    await this.sendToClient(lead, texts);
+    if (voice) await this.sendVoice(lead, voice);
     void this.maybeSummarize(lead).catch(() => undefined);
+  }
+
+  /** Resolves the model's voice_id (short id) to an enabled clip that this client has not received yet. */
+  private async pickVoice(lead: LeadDoc, voiceId?: string | null) {
+    if (!voiceId) return null;
+    const clips = await VoiceClip.find({ enabled: true }).lean();
+    const clip = clips.find((c) => String(c._id).endsWith(voiceId.trim()));
+    if (!clip || (lead.sentVoiceIds ?? []).includes(String(clip._id))) return null;
+    return clip;
+  }
+
+  /** Sends a stored voice from the coach's account: "recording…" first, then the voice. */
+  private async sendVoice(lead: LeadDoc, clip: { _id: unknown; fileId: string; title?: string | null; transcript?: string | null; duration?: number | null }): Promise<void> {
+    const fresh = await Lead.findById(lead._id).select('mode').lean();
+    if (fresh?.mode !== 'AI') return;
+    if (await Message.exists({ leadId: lead._id, sender: 'client', processed: false })) return;
+    try {
+      await this.deps.gateway.sendTyping(lead.businessConnectionId, lead.chatId, 'record_voice').catch(() => undefined);
+      if (!this.opts.fastTyping) await sleep(Math.min(6000, 1500 + (clip.duration ?? 5) * 150));
+      const res = await this.deps.gateway.sendBusinessVoice(lead.businessConnectionId, lead.chatId, clip.fileId);
+      const id = String(clip._id);
+      await Message.create({
+        leadId: lead._id,
+        telegramMessageId: res.messageId,
+        telegramId: lead.chatId,
+        direction: 'outgoing',
+        sender: 'ai',
+        kind: 'voice',
+        text: `[ovozli xabar: ${clip.title || 'taklif'}] ${(clip.transcript ?? '').slice(0, 400)}`.trim(),
+      });
+      await Lead.updateOne({ _id: lead._id }, { $addToSet: { sentVoiceIds: id }, $set: { lastOutgoingAt: this.now() } });
+      lead.sentVoiceIds = [...(lead.sentVoiceIds ?? []), id] as never;
+      await VoiceClip.updateOne({ _id: clip._id }, { $inc: { sentCount: 1 } });
+      logger.info({ leadId: String(lead._id), clip: id }, 'Voice clip sent');
+    } catch (err) {
+      logger.error({ leadId: String(lead._id), err: (err as Error).message }, 'Voice send failed');
+    }
   }
 
   private tz(): string {
@@ -794,6 +878,12 @@ export class ConversationEngine {
   }
 
   /** Tells the model where the sale is and what the next concrete step must be, so it always moves towards payment. */
+  /** Before the offer: the last question from the script — why now, is the decision serious. */
+  private async commitmentDirective(lang: Lang): Promise<string> {
+    const q = await this.deps.settings.text('commitment_question', lang);
+    return `Hali taklif qilma. Avval bitta oxirgi savol ber (mazmuni shu, o'z so'zing bilan, qisqa): «${q}». Oldingi javobiga 1 qisqa reaksiya qo'shsang bo'ladi. sales_step=0.`;
+  }
+
   private async salesDirective(step: number, turns: number): Promise<string> {
     const max = await this.deps.settings.num('max_sales_turns');
     if (step >= 3) {
@@ -803,7 +893,7 @@ export class ConversationEngine {
       return "Suhbat cho'zildi. Endi to'g'ridan-to'g'ri yopish: mijoz rozi bo'lsa yoki ikkilanmasa — to'lov ma'lumotini ber (sales_step=3) va chek so'ra; aks holda bitta aniq savol: «To'lov ma'lumotini yuboraymi?»";
     }
     if (step === 0) {
-      return "Anketadan sotuvga tabiiy o'tish: avval mijozning o'z so'zlari bilan uning holatini qisqa qaytar (maqsadi, oldin nima xalaqit bergani) — u tushunilganini his qilsin. Keyin unga qanday yordam berishingni 1–2 gapda ayt va mos formatni narxi bilan oddiy gapda ayt (ro'yxat emas). Oxirida bitta yengil savol: «Sizga shu format to'g'ri keladimi?» yoki «Boshlaymizmi?». 2–3 ta qisqa xabar, reklama ohangi yo'q.";
+      return "Endi taklif: avval mijozning o'z so'zlari bilan asosiy muammosini bitta gapda ayt («Demak, sizdagi asosiy muammo — aniq reja va nazorat yo'qligi»). Keyin qanday hal qilishni oddiy tilda ayt (ratsion + trenirovka plan, 50 kunlik yopiq guruhda nazorat, qat'iy shartlar). Agar OVOZLAR ichida guruh/taklif haqida ovoz bo'lsa — uni yubor (voice_id) va matnni 1 gapga qisqartir. Narxni mijoz so'rasa yoki keyingi qadamda ayt; davlatini bilmasang avval so'ra. Oxirida bitta yengil savol («Shartlar ma'qulmi?»). Ko'pi bilan 2 ta qisqa xabar.";
     }
     return "Mijoz rozi bo'lsa yoki qanday to'lashni so'rasa — DARHOL to'lov ma'lumotini ber (sales_step=3) va chek yuborishini so'ra. E'tiroz bo'lsa — 1–2 gap bilan javob (natijadan misol), keyin yana yopish savoli. Har javob aniq harakatga chaqiruv bilan tugasin, umumiy gap bilan cho'zma.";
   }
@@ -854,7 +944,7 @@ export class ConversationEngine {
   async sendToClient(lead: LeadDoc, texts: string[], opts: { final?: boolean; kind?: string; at?: Date } = {}): Promise<number> {
     let sent = 0;
     for (const raw of texts) {
-      const text = stripMarkers(raw).text;
+      const text = humanize(stripMarkers(raw).text);
       if (!text) continue;
       const fresh = await Lead.findById(lead._id).select('mode status').lean();
       if (!fresh || fresh.mode !== 'AI' || (!opts.final && !ACTIVE_STATUSES.includes(fresh.status as LeadStatus))) {
@@ -979,6 +1069,7 @@ export class ConversationEngine {
       status: { $in: ACTIVE_STATUSES },
       pendingSince: { $lte: cutoff },
       aiFailures: { $lt: 6 },
+      $or: [{ aiPausedUntil: null }, { aiPausedUntil: { $lte: this.now() } }],
     })
       .select('_id')
       .limit(20)
@@ -1024,6 +1115,13 @@ export function looksLikeQuestion(text: string): boolean {
 }
 
 const isGreeting = (m: string) => /^(assalomu alaykum|assalom|salom|va alaykum|здравствуйте|привет|добрый)/i.test(normalize(m));
+
+/** Trims to the per-turn limit but keeps the last message (usually the question that moves the chat on). */
+export function trimMessages(out: string[], limit: number): string[] {
+  if (limit <= 0 || out.length <= limit) return out;
+  if (limit === 1) return [out.find(looksLikeQuestion) ?? out[0]];
+  return [...out.slice(0, limit - 1), out[out.length - 1]];
+}
 
 const isBareAck = (m: string) => /^(tushunarli|tushundim|aha|zo'r|yaxshi|hop|ok|понятно|ясно|хорошо|ага)[.!]?$/i.test(m.trim());
 
