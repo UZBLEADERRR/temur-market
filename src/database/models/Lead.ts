@@ -82,6 +82,8 @@ const LeadSchema = new Schema(
     /** The coach is writing himself — the AI stays silent in this chat until this time. */
     aiPausedUntil: Date,
     commitmentAsked: { type: Boolean, default: false },
+    /** How many times the client said a soft «no» during the sale (one save attempt before giving up). */
+    refusalCount: { type: Number, default: 0 },
     sentVoiceIds: { type: [String], default: [] },
     answeredAt: Date,
     paidAt: Date,

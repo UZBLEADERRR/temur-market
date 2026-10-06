@@ -29,6 +29,20 @@
   - Shartlar: to'lov oldindan; qoida buzilsa qaytarilmaydi.
   - **To'lov ma'lumoti** (karta) maydonini o'zingiz to'ldirasiz.
 
+### Kuchli, lekin halol sotuvchi
+
+Sotuv skripti (mini ilova → Sozlamalar → "Sotuv skripti") quyidagi usullar asosida tuzilgan:
+- **Og'riq:** mijozning o'z so'zlarini qaytaradi va shu holat davom etsa nima bo'lishini eslatadi.
+- **Natija:** 50 kundan keyin u qanday holatda bo'lishini aniq tasvirlaydi.
+- **Yechim:** aynan uning muammosini yopadigan qismni aytadi (reja, nazorat, har kungi tekshiruv).
+- **Ijtimoiy isbot:** o'quvchilar natijalaridan unga o'xshash misol keltiradi.
+- **Narx qiymatdan keyin:** narxni kunlikka bo'lib ko'rsatadi ("kuniga bitta kofe puli").
+- **Kichik "ha"lar zanjiri:** "To'g'ri keladimi?" → "Dushanbadan boshlaymizmi?" → "Karta raqamini tashlaymi?". Qiziqish bildirilsa, taxminiy yopishga o'tadi.
+- **E'tirozlar:** qimmat, o'ylab ko'raman, vaqt yo'q, kafolat, keyinroq, oila bilan maslahat. Har birida asl sababi topiladi, bitta kuchli javob beriladi va yana yopish savoli beriladi.
+- **Birinchi yumshoq "yo'q" oxiri emas:** bot bir marta hurmat bilan sababini so'raydi va bitta qiymatli javob beradi. Ikkinchi aniq "yo'q"da yoki "yozmang" desa iliq xayrlashadi.
+- **Mijoz "o'ylab ko'raman" desa:** kelishilgan vaqtda eslatma yuboriladi (3 tagacha, 24 soatlik oyna ichida).
+- **Taqiqlangan:** soxta shoshilinchlik, soxta chegirma, kafolat va to'qima natija.
+
 ### 2-botni Railway'da ishga tushirish
 
 1. Railway → loyiha → **+ New → GitHub Repo** → `temur-market` → servis **Settings → Source → Branch: `bot2`**.

@@ -732,7 +732,10 @@ export class ConversationEngine {
     const step = lead.salesStep ?? 0;
     const turns = lead.salesTurns ?? 0;
     const commitmentFirst = step === 0 && !lead.commitmentAsked && (await s.bool('ask_commitment'));
-    const directive = commitmentFirst ? await this.commitmentDirective(lang) : await this.salesDirective(step, turns);
+    let directive = commitmentFirst ? await this.commitmentDirective(lang) : await this.salesDirective(step, turns);
+    if ((lead.refusalCount ?? 0) > 0) {
+      directive += " Mijoz avval bir marta rad etgan: qaytib qiziqsa — davom et; yana aniq «yo'q» desa — REFUSED, qayta bosim qilma.";
+    }
     let ai: AiResponse;
     try {
       ai = await this.askAi(lead, plainAnswers(lead), 6, lead.bmi ?? undefined, lang, newMessages, 6, photoIds, false, true, directive);
@@ -742,6 +745,22 @@ export class ConversationEngine {
     }
     lead.aiFailures = 0;
     await markProcessed();
+    // the first soft «no» is not the end: one honest save attempt (find the real reason, one strong answer)
+    if (ai.action === 'REFUSED') {
+      const hardNo = Boolean(containsAny(newMessages.join(' '), HARD_NO));
+      if (!hardNo && (lead.refusalCount ?? 0) === 0) {
+        lead.refusalCount = 1;
+        const save =
+          "Mijoz birinchi marta rad etdi. Hali xayrlashma: hurmat bilan asl sababini bil (narxmi, vaqtmi, ishonchmi) va unga bitta qisqa, qiymatli javob ber, oxirida yengil savol. Bosim yo'q. action=ASK_NEXT. Agar xabarda aniq «kerak emas, yozmang» bo'lsa — REFUSED.";
+        try {
+          ai = await this.askAi(lead, plainAnswers(lead), 6, lead.bmi ?? undefined, lang, newMessages, 6, photoIds, false, true, save);
+        } catch {
+          /* keep the original answer */
+        }
+      } else {
+        lead.refusalCount = (lead.refusalCount ?? 0) + 1;
+      }
+    }
     if (ai.language) lead.language = ai.language;
     const outLang = (lead.language as Lang) ?? lang;
     const recent = new Set((await this.recentAiTexts(lead, 4)).map(normalize));
@@ -895,7 +914,7 @@ export class ConversationEngine {
     if (step === 0) {
       return "Endi taklif: avval mijozning o'z so'zlari bilan asosiy muammosini bitta gapda ayt («Demak, sizdagi asosiy muammo — aniq reja va nazorat yo'qligi»). Keyin qanday hal qilishni oddiy tilda ayt (ratsion + trenirovka plan, 50 kunlik yopiq guruhda nazorat, qat'iy shartlar). Agar OVOZLAR ichida guruh/taklif haqida ovoz bo'lsa — uni yubor (voice_id) va matnni 1 gapga qisqartir. Narxni mijoz so'rasa yoki keyingi qadamda ayt; davlatini bilmasang avval so'ra. Oxirida bitta yengil savol («Shartlar ma'qulmi?»). Ko'pi bilan 2 ta qisqa xabar.";
     }
-    return "Mijoz rozi bo'lsa yoki qanday to'lashni so'rasa — DARHOL to'lov ma'lumotini ber (sales_step=3) va chek yuborishini so'ra. E'tiroz bo'lsa — 1–2 gap bilan javob (natijadan misol), keyin yana yopish savoli. Har javob aniq harakatga chaqiruv bilan tugasin, umumiy gap bilan cho'zma.";
+    return "Yopishga intil. Mijoz rozi bo'lsa, qiziqsa yoki qanday to'lashni so'rasa — DARHOL to'lov ma'lumotini ber (sales_step=3) va chek so'ra (taxminiy yopish: «Unda boshlaymiz, karta raqamini tashlayman»). E'tiroz bo'lsa — tan ol, asl sababini bil, bitta kuchli javob (hisob yoki o'xshash o'quvchi natijasi), keyin yana kichik «ha» so'raydigan savol. Har javob aniq keyingi qadam bilan tugasin, umumiy gap bilan cho'zma.";
   }
 
   /** After the questionnaire, for "always on" clients: free conversation as the coach's assistant. */
@@ -1049,7 +1068,7 @@ export class ConversationEngine {
     await Lead.updateOne(
       { _id: lead._id },
       {
-        $set: { answers: {}, status: 'NEW', mode: 'AI', urgent: false, remindersSent: 0, aiFailures: 0, askCount: 0, skippedSteps: [], currentQuestion: 1, adminCardMessageIds: [], salesStep: 0, salesTurns: 0, followUpsSent: 0 },
+        $set: { answers: {}, status: 'NEW', mode: 'AI', urgent: false, remindersSent: 0, aiFailures: 0, askCount: 0, skippedSteps: [], currentQuestion: 1, adminCardMessageIds: [], salesStep: 0, salesTurns: 0, followUpsSent: 0, refusalCount: 0, commitmentAsked: false, sentVoiceIds: [] },
         $unset: {
           intent: '', bmi: '', targetBmi: '', readyReason: '', summary: '', summaryMessageCount: '', lastAskedStep: '', pendingSince: '',
           lastClientMessageAt: '', lastOutgoingAt: '', readyAt: '', answeredAt: '', paidAt: '', rejectedAt: '', aiFailureNotifiedAt: '', questionnaireDoneAt: '', soldAt: '', followUpAt: '', followUpNote: '',
@@ -1122,6 +1141,9 @@ export function trimMessages(out: string[], limit: number): string[] {
   if (limit === 1) return [out.find(looksLikeQuestion) ?? out[0]];
   return [...out.slice(0, limit - 1), out[out.length - 1]];
 }
+
+/** Clear «stop» phrases: no save attempt, the client asked to stop. */
+const HARD_NO = ['yozmang', 'bezovta qilmang', 'kerak emas dedim', 'qiziqmayman', "boshqa yozmang", 'не пишите', 'не беспокойте', 'не интересно'].map((k) => normalize(k));
 
 const isBareAck = (m: string) => /^(tushunarli|tushundim|aha|zo'r|yaxshi|hop|ok|понятно|ясно|хорошо|ага)[.!]?$/i.test(m.trim());
 

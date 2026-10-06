@@ -618,7 +618,7 @@ describe('sales stage and coach messages', () => {
     llm.push(completeQuestionnaire, { messages: ['Taklif', 'Boshlaymizmi?'], action: 'ASK_NEXT' });
     await engine.handleClientMessage(clientMsg(92, 'Kurs: 180 95 25, hammasi'));
     llm.push({ messages: ["Tushunarli, eshik doim ochiq. Omad!"], action: 'REFUSED' });
-    await engine.handleClientMessage(clientMsg(92, 'Yoq, kerak emas'));
+    await engine.handleClientMessage(clientMsg(92, 'Yoq, qiziqmayman'));
     const lead = await Lead.findOne({ chatId: 92 });
     expect(lead?.readyReason).toBe('refused');
     expect(lead?.mode).toBe('MANUAL');
@@ -973,5 +973,58 @@ describe('bot2: voices, coach pause, context after restart, human text', () => {
     expect(humanize('Ajoyib savol! **Kurs** 50 kunlik — har kuni nazorat 💪🔥🎉')).toBe('**Kurs** 50 kunlik - har kuni nazorat 💪'.replace('**Kurs**', 'Kurs'));
     expect(humanize('- birinchi\n- ikkinchi')).toBe('Birinchi\nikkinchi');
     expect(humanize('Albatta! Boshlaymiz')).toBe('Boshlaymiz');
+  });
+});
+
+describe('bot2: strong but honest closer', () => {
+  const done = {
+    messages: ['Rahmat!'],
+    action: 'READY',
+    reason: 'completed',
+    answered_current: true,
+    extracted: { trainingExperience: '1 yil', goal: 'ozish', trainingDays: 3, trainingLocation: 'zal', previousAttempts: 'reja yo\'q', healthProblems: "yo'q" },
+  };
+  async function inSales(chatId: number) {
+    const ctx = buildApp();
+    await ctx.settings.set({ ask_commitment: false });
+    ctx.llm.push(done, { messages: ["Kuniga bitta kofe puli. Boshlaymizmi?"], action: 'ASK_NEXT', sales_step: 2 });
+    await ctx.engine.handleClientMessage(clientMsg(chatId, 'Kurs: 175 82 24, hammasi'));
+    return ctx;
+  }
+
+  it('the first soft «no» gets one save attempt instead of a goodbye', async () => {
+    const { engine, gateway, llm } = await inSales(130);
+    llm.push({ messages: ['Mayli, omad'], action: 'REFUSED' });
+    llm.push((req) => {
+      expect(req.parts.at(-1)!.text).toContain('birinchi marta rad etdi');
+      return { messages: ["Tushunaman. Nima to'xtatyapti, narxmi yo vaqtmi?"], action: 'ASK_NEXT' };
+    });
+    await engine.handleClientMessage(clientMsg(130, "Yo'q, hozircha kerakmas"));
+    const lead = await Lead.findOne({ chatId: 130 });
+    expect(lead?.status).toBe('SALES');
+    expect(lead?.mode).toBe('AI');
+    expect(gateway.textsTo(130).at(-1)).toContain('narxmi yo vaqtmi');
+    // second clear no → polite goodbye, handed over
+    llm.push((req) => {
+      expect(req.parts.at(-1)!.text).toContain('avval bir marta rad etgan');
+      return { messages: ["Tushunarli, fikringiz o'zgarsa yozing"], action: 'REFUSED' };
+    });
+    await engine.handleClientMessage(clientMsg(130, "Yo'q, rostdan kerak emas"));
+    expect((await Lead.findOne({ chatId: 130 }))?.readyReason).toBe('refused');
+  });
+
+  it('«yozmang» is respected immediately — no save attempt', async () => {
+    const { engine, llm } = await inSales(131);
+    llm.push({ messages: ['Uzr, bezovta qilmayman'], action: 'REFUSED' });
+    await engine.handleClientMessage(clientMsg(131, 'Kerak emas, boshqa yozmang'));
+    expect((await Lead.findOne({ chatId: 131 }))?.readyReason).toBe('refused');
+  });
+
+  it('the sales script is a closer: value before price, small yeses, no fake urgency', async () => {
+    const { settings } = buildApp();
+    const script = await settings.get('sales_prompt');
+    for (const s of ["Og'riqni aniqla", 'Ijtimoiy isbot', 'kunlikka', "Kichik «ha»lar", 'Birinchi «yo\'q» — oxiri emas', 'Soxta shoshilinchlik']) {
+      expect(script).toContain(s);
+    }
   });
 });
