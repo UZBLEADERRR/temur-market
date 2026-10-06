@@ -55,6 +55,7 @@ async function main() {
   await bot.api
     .setMyCommands(
       [
+        { command: 'app', description: 'Mini ilova' },
         { command: 'status', description: 'Tizim holati' },
         { command: 'navbat', description: 'Javob kutayotgan mijozlar' },
         { command: 'stats', description: 'Kunlik statistika' },
