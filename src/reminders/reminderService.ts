@@ -1,5 +1,7 @@
 import { Lead } from '../database/models/Lead';
 import { Reminder } from '../database/models/misc';
+import { Message } from '../database/models/Message';
+import type { TelegramGateway } from '../telegram/gateway';
 import type { ConversationEngine } from '../conversations/engine';
 import type { SettingsService } from '../services/settings';
 import type { Lang } from '../utils/text';
@@ -17,9 +19,42 @@ export class ReminderService {
   constructor(
     private readonly engine: ConversationEngine,
     private readonly settings: SettingsService,
+    private readonly gateway?: TelegramGateway,
   ) {}
 
+  /**
+   * The chat was handed to the coach (discount, card, «Temur bilan gaplashmoqchiman»…) and the client keeps writing
+   * without an answer → remind the coach (every N minutes, at most 3 times) so nobody is left hanging.
+   */
+  async nudgeCoach(now = new Date()): Promise<number> {
+    const every = (await this.settings.num('coach_nudge_minutes')) * MINUTE;
+    if (every <= 0) return 0;
+    const leads = await Lead.find({
+      status: 'READY',
+      readyReason: { $in: ['wants_coach', 'payment_request', 'sold', 'bot_question', 'completed'] },
+      coachNudges: { $lt: 3 },
+      lastClientMessageAt: { $ne: null, $lte: new Date(now.getTime() - every) },
+    }).limit(50);
+    let n = 0;
+    for (const lead of leads) {
+      if (lead.readyAt && lead.lastClientMessageAt! <= lead.readyAt) continue; // the client is not waiting
+      const lastCoach = await Message.findOne({ leadId: lead._id, sender: 'temur' }).sort({ createdAt: -1 }).select('createdAt').lean();
+      if (lastCoach && lastCoach.createdAt >= lead.lastClientMessageAt!) continue; // already answered
+      if (lead.coachNudgedAt && now.getTime() - lead.coachNudgedAt.getTime() < every) continue;
+      const waited = Math.round((now.getTime() - lead.lastClientMessageAt!.getTime()) / MINUTE);
+      await this.gateway
+        ?.notifyAdmins(
+          `⏰ Mijoz ${waited} daqiqadan beri javobingizni kutyapti: <a href="tg://user?id=${lead.telegramId}">${(lead.name || lead.firstName || 'mijoz').replace(/[<>&]/g, '')}</a>${lead.username ? ' @' + lead.username : ''}`,
+        )
+        .catch(() => undefined);
+      await Lead.updateOne({ _id: lead._id }, { $set: { coachNudgedAt: now }, $inc: { coachNudges: 1 } });
+      n++;
+    }
+    return n;
+  }
+
   async tick(now = new Date()): Promise<number> {
+    await this.nudgeCoach(now).catch(() => 0);
     // planned «o'ylab ko'raman» follow-ups first
     const due = await Lead.find({
       followUpAt: { $ne: null, $lte: now },

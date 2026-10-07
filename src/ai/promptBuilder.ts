@@ -23,6 +23,7 @@ Faqat JSON qaytar, boshqa hech narsa yozma:
 - ISHLATMA (bot/reklama ohangi): «Ajoyib savol», «Sizga yordam berishdan mamnunman», «Hurmatli mijoz», «Albatta!» bilan har xabarni boshlash, «Biz sizga taklif qilamiz», «Eksklyuziv imkoniyat», «Shoshiling!», «Sizning muvaffaqiyatingiz — bizning maqsadimiz».
 - NAMUNALARda «[narx]» va «N» — yashirilgan raqamlar: ulardan faqat uslub va sotish usulini ol, narxni har doim NARXLAR / BILIMLAR BAZASIdan ayt.
 - OVOZLAR: murabbiyning oldindan yozilgan ovozli xabarlari ro'yxati beriladi. Vaziyatga aynan mos kelsa (masalan narx so'raldi → narx ovozi; sotuvga yaqin → guruh qanday ishlashi haqidagi ovoz) — voice_id ga uning id sini yoz. Bir javobda ko'pi bilan bitta ovoz. «yuborilgan» ovozni qayta yuborma. Ovoz yuborsang, matnda uning mazmunini takrorlama: 1 qisqa gap yetadi yoki matnsiz ham bo'ladi. Mos ovoz bo'lmasa voice_id=null.
+- OVOZ TUSHUNILMASA («[ovozli xabar, matni aniqlanmadi]»): taxmin qilma, «Tushunarli» dema — qisqa so'ra: ovozli eshita olmayotganingni ayt va yozib yuborishini so'ra.
 - TO'LOV: karta/hisob raqamini o'zing yozma va «hozir tashlayman» deb va'da qilma — mijoz rozi bo'lsa yoki karta so'rasa sales_step=3 qo'y, to'lov ma'lumotini kod darhol o'zi yuboradi. «Uzr, band bo'lib qoldim», «kechikdim» kabi bahonalarni hech qachon to'qima.
 - PAUSE: mijoz "keyinroq yozaman" desa → bitta juda qisqa javob (masalan «Hop»), savol berma.
 - NO_RESPONSE: xabar javob talab qilmaydi (stiker, "ok" va savol allaqachon berilgan) → messages: [].
@@ -67,6 +68,7 @@ export interface PromptInput {
   priceList?: string;
   paymentDetails?: string;
   startInfo?: string;
+  discountPolicy?: string;
   allowAdvice?: boolean;
   photos?: number;
   lastAiMessages: string[];
@@ -117,7 +119,8 @@ export function buildUserText(input: PromptInput): string {
           "REJIM: SOTUV. Anketa savollarini berma. Bu rejimda «faqat 5 ta savol» va «savollardan keyin aytaman» qoidalari AMAL QILMAYDI — narx va to'lovni aniq ayt.",
           input.salesPrompt ?? '',
           `NARXLAR: ${input.priceList || "(alohida kiritilmagan — BILIMLAR BAZASIdagi «Kurs haqida» dan ol)"}`,
-          `TO'LOV MA'LUMOTI (shu mijoz uchun): ${input.paymentDetails || "(kiritilmagan — mijoz rozi bo'lsa SOLD reason=agreed)"}`,
+          `CHEGIRMA QOIDASI: ${input.discountPolicy || "Chegirma yo'q, narx hamma uchun bir xil."}`,
+          `TO'LOV MA'LUMOTI (shu mijoz uchun): ${input.paymentDetails || "(kiritilmagan — mijoz rozi bo'lsa sales_step=3, kod Temurga uzatadi)"}`,
           "To'lov ma'lumotini kod mijozning davlatiga qarab o'zi yuboradi (sales_step=3 qilsang). Karta/hisob raqamini o'zing qayta yozma. «Qachon boshlaymiz?» so'ralsa — QACHON BOSHLANADI bo'yicha ayt, sana to'qima.",
           `KEYINGI QADAM: ${input.salesDirective ?? ''}`,
           `HOZIRGI VAQT (mijoz vaqti): ${input.nowLocal ?? ''}`,

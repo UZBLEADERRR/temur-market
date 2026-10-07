@@ -122,7 +122,7 @@ export function buildApp(opts: { now?: () => Date } = {}) {
   const gateway = new FakeGateway();
   const leads = new LeadService({ gateway, timeZone: 'Asia/Tashkent', publicUrl: 'https://example.test' });
   const engine = new ConversationEngine({ gateway, ai, settings, leads }, { debounceMsOverride: 0, fastTyping: true, now: opts.now });
-  const reminders = new ReminderService(engine, settings);
+  const reminders = new ReminderService(engine, settings, gateway);
   const app: AppContext = { env, settings, ai, engine, leads, reminders, gateway };
   return { app, settings, llm, ai, gateway, leads, engine, reminders };
 }

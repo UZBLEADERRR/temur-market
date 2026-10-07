@@ -156,11 +156,11 @@ describe('questionnaire flow', () => {
     expect((await Lead.findOne({ chatId: 18 }))?.mode).toBe('MANUAL');
   });
 
-  it('10. client asks for TEMUR → Tushunarli, [TAYYOR]', async () => {
+  it('10. client asks for TEMUR → honest hand-over line, [TAYYOR]', async () => {
     const { engine, gateway } = buildApp();
     await engine.handleClientMessage(clientMsg(19, 'Salom, kurs haqida'));
     await engine.handleClientMessage(clientMsg(19, 'Temur bilan gaplashmoqchiman'));
-    expect(gateway.textsTo(19).at(-1)).toBe('Tushunarli');
+    expect(gateway.textsTo(19).at(-1)).toBe("Hop, buni o'zim alohida gaplashib ko'raman, hozir yozaman");
     const lead = await Lead.findOne({ chatId: 19 });
     expect(lead?.readyReason).toBe('wants_coach');
     expect(lead?.urgent).toBe(false);
@@ -1291,5 +1291,84 @@ describe('bot2: «karta tashen» always gets the card (or the coach)', () => {
     await engine.handleClientMessage(clientMsg(182, "Koreadaman, savollarsiz to'layman, karta tashlang"));
     expect(gateway.textsTo(182).at(-1)).toBe(KR);
     expect((await Lead.findOne({ chatId: 182 }))?.status).toBe('SALES');
+  });
+});
+
+describe('bot2: screenshot «qayerdaligini so\'ramagan va javob bermagan»', () => {
+  const done = {
+    messages: ['Rahmat!'],
+    action: 'READY',
+    reason: 'completed',
+    answered_current: true,
+    extracted: { trainingExperience: '1 yil', goal: 'ozish', trainingDays: 3, trainingLocation: 'zal', previousAttempts: 'reja yo\'q', healthProblems: "yo'q" },
+  };
+  const KR = 'Woori bank: 1002-063-833262\nEgasi: Temur F.\nSumma: 150,000 KRW';
+
+  it('a voice that cannot be transcribed → honest «yozib yuborsangiz», never «Tushunarli», admin is told', async () => {
+    const { engine, gateway, llm } = buildApp();
+    await engine.handleClientMessage(clientMsg(190, 'Salom, kurs haqida'));
+    const calls = llm.calls.filter((c) => c.json).length;
+    llm.transcript = '';
+    await engine.handleClientMessage(clientMsg(190, '', { kind: 'voice', voice: { fileId: 'bad' } }));
+    expect(gateway.textsTo(190).at(-1)).toBe('Aka, hozir ovozli eshitolmayapman, yozib yuborsangiz');
+    expect(gateway.textsTo(190)).not.toContain('Tushunarli');
+    expect(llm.calls.filter((c) => c.json).length).toBe(calls); // no guessing by the model
+    expect(gateway.admin.some((a) => /ovoz/i.test(a.html))).toBe(true);
+    // the next text message is answered normally
+    llm.transcript = 'transkript matni';
+    llm.push({ messages: ['Hop aka. Bo\'y, ves, yosh?'], action: 'ASK_NEXT', question: 1 });
+    await engine.handleClientMessage(clientMsg(190, 'Kurs narxi qancha?'));
+    expect(gateway.textsTo(190).at(-1)).toContain("Bo'y, ves, yosh?");
+  });
+
+  it('«ha» is not a sale: SOLD without a receipt → payment step, the card is sent, chat stays with the AI', async () => {
+    const { engine, gateway, llm, settings } = buildApp();
+    await settings.set({ ask_commitment: false, payment_details_kr: KR });
+    llm.push(done, { messages: ['Boshlaymizmi?'], action: 'ASK_NEXT', sales_step: 2 });
+    await engine.handleClientMessage(clientMsg(191, 'Kurs: 175 82 24, hammasi. Koreadaman'));
+    llm.push({ messages: [], action: 'SOLD', reason: 'agreed' });
+    await engine.handleClientMessage(clientMsg(191, 'Ha'));
+    const lead = await Lead.findOne({ chatId: 191 });
+    expect(lead?.status).toBe('SALES');
+    expect(lead?.mode).toBe('AI');
+    expect(gateway.textsTo(191).at(-1)).toBe(KR);
+  });
+
+  it('country unknown → «to\'lov ma\'lumotini yuboraymi?» is replaced by the country question', async () => {
+    const { engine, gateway, llm, settings } = buildApp();
+    await settings.set({ ask_commitment: false, payment_details_kr: KR, payment_details_uz: 'Karta: 8600 0000 0000 0000' });
+    llm.push(done, { messages: ['Boshlaymizmi?'], action: 'ASK_NEXT', sales_step: 2 });
+    await engine.handleClientMessage(clientMsg(192, 'Kurs: 175 82 24, hammasi'));
+    llm.push({ messages: ["Zo'r, to'lov ma'lumotini yuboraymi?"], action: 'ASK_NEXT', sales_step: 2 });
+    await engine.handleClientMessage(clientMsg(192, "Bo'ladi"));
+    expect(gateway.textsTo(192).at(-1)).toBe("Qayerdasiz, Koreyadamisiz yo O'zbekistonda?");
+  });
+
+  it('«800 mingga bo\'ladimi?» — the discount policy is in the prompt and the AI keeps selling', async () => {
+    const { engine, gateway, llm, settings } = buildApp();
+    await settings.set({ ask_commitment: false, discount_policy: 'Chegirma yo\'q, lekin 2 kishi kelsa 10%' });
+    llm.push(done, { messages: ['Boshlaymizmi?'], action: 'ASK_NEXT', sales_step: 2 });
+    await engine.handleClientMessage(clientMsg(193, 'Kurs: 175 82 24, hammasi. Toshkentdaman'));
+    llm.push((req) => {
+      expect(req.parts.at(-1)!.text).toContain("CHEGIRMA QOIDASI: Chegirma yo'q, lekin 2 kishi kelsa 10%");
+      return { messages: ["Chegirma yo'q aka, lekin do'stingiz bilan kelsangiz 10%"], action: 'ASK_NEXT', sales_step: 2 };
+    });
+    await engine.handleClientMessage(clientMsg(193, "Bo'ladimi 800ming bersam"));
+    expect(gateway.textsTo(193).at(-1)).toContain('10%');
+    expect((await Lead.findOne({ chatId: 193 }))?.mode).toBe('AI');
+  });
+
+  it('client waits after the hand-over and the coach is silent → admin is reminded (max once per interval)', async () => {
+    const { engine, gateway, llm, reminders } = buildApp();
+    await engine.handleClientMessage(clientMsg(194, 'Salom, kurs haqida'));
+    llm.push({ messages: [], action: 'READY', reason: 'wants_coach' });
+    await engine.handleClientMessage(clientMsg(194, "Temur akaning o'zi bilan gaplashsam bo'ladimi?"));
+    expect(gateway.textsTo(194).at(-1)).toBe("Hop, buni o'zim alohida gaplashib ko'raman, hozir yozaman");
+    await engine.handleClientMessage(clientMsg(194, 'Javob kutyapman'));
+    const now = new Date(Date.now() + 16 * 60_000);
+    const before = gateway.admin.length;
+    expect(await reminders.nudgeCoach(now)).toBe(1);
+    expect(gateway.admin.slice(before).some((a) => a.html.includes('javobingizni kutyapti'))).toBe(true);
+    expect(await reminders.nudgeCoach(new Date(now.getTime() + 60_000))).toBe(0);
   });
 });

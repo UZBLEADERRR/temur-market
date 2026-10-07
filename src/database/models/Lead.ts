@@ -88,6 +88,9 @@ const LeadSchema = new Schema(
     refusalCount: { type: Number, default: 0 },
     /** The results link was already sent to this client (never spam it). */
     resultsLinkSent: { type: Boolean, default: false },
+    /** Last time the coach was reminded that this client is waiting for him. */
+    coachNudgedAt: Date,
+    coachNudges: { type: Number, default: 0 },
     sentVoiceIds: { type: [String], default: [] },
     answeredAt: Date,
     paidAt: Date,

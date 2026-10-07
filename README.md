@@ -43,6 +43,15 @@ Qanday ishlaydi:
 - **"Qachon boshlanadi"** maydoni: to'lovdan keyin nima bo'lishi va guruh qachon boshlanishi. Mijoz "qachondan boshlaymiz?" desa, bot shu matn asosida javob beradi va sana to'qimaydi. Standart matn: to'lovdan keyin chek, rasmlar va o'lchamlar yuboriladi, ratsion tuzilgach guruhga qo'shiladi.
 - **`/status`** qaysi maydonlar to'ldirilganini ko'rsatadi: 🇰🇷 ✅/❌ · 🇺🇿 ✅/❌ · boshlanish ✅/❌.
 
+### Ovoz, chegirma, "ha" va murabbiyga eslatma
+
+- **Ovoz tushunilmasa** bot taxmin qilmaydi va "Tushunarli" demaydi. U "Aka, hozir ovozli eshitolmayapman, yozib yuborsangiz" deb yozadi (`voice_unreadable`), adminga esa ogohlantirish keladi (6 soatda ko'pi bilan bir marta).
+- **"Ha" bu sotuv emas.** SOLD faqat chek kelganda bo'ladi. Mijoz rozi bo'lsa bot to'lov ma'lumotini yuboradi va suhbat AI da qoladi.
+- **To'lov taklifidan oldin davlat so'raladi.** Davlat noma'lum bo'lsa, "to'lov ma'lumotini yuboraymi?" o'rniga "Koreyadamisiz yo O'zbekistonda?" ketadi.
+- **Chegirma qoidasi** (`discount_policy`, "Murabbiy haqida" bo'limida): "800 mingga bo'ladimi?" kabi savollarga bot shu qoida bo'yicha javob beradi va sotuvni davom ettiradi.
+- **Murabbiyga uzatish** (mijoz Temurning o'zini so'rasa) endi "Hop, buni o'zim alohida gaplashib ko'raman, hozir yozaman" (`handover_message`) degan gap bilan bo'ladi.
+- **Murabbiyga eslatma:** uzatilgan mijoz yozgan bo'lsa-yu, Temur `coach_nudge_minutes` (standart 15) daqiqa ichida javob bermasa, adminga "⏰ Mijoz … kutyapti" eslatmasi keladi. Bitta mijoz uchun ko'pi bilan 3 marta yuboriladi, 0 qo'yilsa o'chadi.
+
 ### Natijalar havolasi
 
 - **Havolani kiritish:** mini ilova → "Murabbiy haqida" → **"Natijalar havolasi"**. Bu natijalar kanali yoki "oldin-keyin" posti bo'lishi mumkin.

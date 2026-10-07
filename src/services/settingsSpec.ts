@@ -119,6 +119,27 @@ Boshqa chet eldagilar uchun: 1,200,000 so'm
     default:
       "karta, kartani, karta raqam, kartangiz, hisob raqam, rekvizit, qayerga to'layman, qanday to'layman, to'lov qilaman, to'lamoqchiman, to'layman, pul tashlayman, tashen karta, карта, карту, номер карты, реквизит, куда платить, как оплатить, оплачу, хочу оплатить",
   },
+  {
+    key: 'discount_policy',
+    label: "Chegirma qoidasi (AI chegirma so'ralganda shunga amal qiladi)",
+    group: 'Murabbiy',
+    type: 'longtext',
+    default:
+      "Chegirma yo'q: narx hamma uchun bir xil, chunki har kimga shaxsiy ratsion va har kungi nazorat beriladi. Narxni kunlikka bo'lib ko'rsat va natija qiymatini eslat. Mijoz juda qattiq tursa — «buni o'zim alohida gaplashib ko'raman» deb murabbiyga o'tkaz (READY wants_coach).",
+  },
+  ...q(
+    'handover_message',
+    "Chat murabbiyga o'tganda mijozga yoziladigan gap",
+    "Hop, buni o'zim alohida gaplashib ko'raman, hozir yozaman",
+    'Хорошо, это обсужу с вами сам, сейчас напишу',
+  ),
+  ...q(
+    'voice_unreadable',
+    "Ovozli xabarni tushunib bo'lmasa",
+    "Aka, hozir ovozli eshitolmayapman, yozib yuborsangiz",
+    'Сейчас не могу послушать голосовое, напишите текстом, пожалуйста',
+  ),
+  { key: 'coach_nudge_minutes', label: "Mijoz sizni kutayotgan bo'lsa necha daqiqada eslatish", group: 'Xulq', type: 'number', default: 15 },
   ...q(
     'payment_handover_message',
     "To'lov ma'lumoti kiritilmagan bo'lsa mijozga yoziladigan gap",
@@ -171,9 +192,9 @@ SOTISH USULI
 8. Birinchi «yo'q» — oxiri emas. Mijoz ikkilanib rad etsa, sababini so'ra va bitta qiymatli javob ber (action=ASK_NEXT). Faqat ikkinchi aniq «yo'q»da yoki «kerak emas, yozmang» desa → action=REFUSED: iliq xayrlash, eshik ochiq («fikringiz o'zgarsa yozing»).
 9. Mijoz rozi bo'lsa — darhol to'lov ma'lumotini ber va to'lovdan keyin chek yuborishini so'ra. Rozilikdan keyin sotishni davom ettirma.
 10. Chek yoki «to'ladim» → action=SOLD, reason=paid: qisqa samimiy rahmat, «tekshirib, guruh linkini yuboraman». Linkni o'zing yuborma.
-11. Bazada to'lov ma'lumoti bo'lmasa: aniq rozilikda → action=SOLD, reason=agreed.
+11. SOLD faqat mijoz to'lov qilganini aytsa yoki chek yuborsa. Rozilik — bu hali sotuv emas: rozi bo'lsa sales_step=3 qo'y (to'lov ma'lumotini kod yuboradi).
 12. Narx davlatga qarab farq qiladi: mijoz qayerda yashashini bilmasang, narxdan oldin so'ra («Koreyadamisiz yo O'zbekistonda?»).
-13. Bazada yo'q chegirma yoki maxsus shart so'rasa yoki murabbiyning o'zini so'rasa → action=READY, reason=wants_coach.
+13. Chegirma yoki narxni tushirish so'rasa (masalan «800 mingga bo'ladimi?») — CHEGIRMA QOIDASI bo'yicha o'zing javob ber, suhbatni to'xtatma: qiymatni eslat, kunlikka hisobla, yana yopish savoli. Faqat mijoz murabbiyning o'zini so'rasa → action=READY, reason=wants_coach.
 
 QOIDALAR
 - Qisqa yoz: odatda 1 ta, ko'pi bilan 2 ta xabar. Uzun matn sotmaydi.

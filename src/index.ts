@@ -35,7 +35,7 @@ async function main() {
   const gateway = new GrammyGateway(bot, env.adminIds, env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_API_ROOT);
   const leads = new LeadService({ gateway, timeZone: env.TZ_NAME, publicUrl: env.publicUrl });
   const engine = new ConversationEngine({ gateway, ai, settings, leads }, { timeZone: env.TZ_NAME });
-  const reminders = new ReminderService(engine, settings);
+  const reminders = new ReminderService(engine, settings, gateway);
   const app: AppContext = { env, settings, ai, engine, leads, reminders, gateway };
 
   registerBusinessHandlers(bot, app);

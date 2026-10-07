@@ -322,7 +322,16 @@ export class ConversationEngine {
         });
         m.text = t ? `[ovozli xabar] ${t}` : '[ovozli xabar, matni aniqlanmadi]';
         await Message.updateOne({ _id: m._id }, { $set: { text: m.text } });
+        if (!t) await this.notifyVoiceProblem();
       }
+    }
+    // only voices we could not understand → say so honestly instead of guessing («Tushunarli» to an unheard «ha»)
+    if (pending.every((m) => m.text === '[ovozli xabar, matni aniqlanmadi]')) {
+      await Message.updateMany({ _id: { $in: pending.map((m) => m._id) } }, { $set: { processed: true } });
+      lead.pendingSince = undefined;
+      await lead.save();
+      await this.sendToClient(lead, [await this.deps.settings.text('voice_unreadable', (lead.language as Lang) ?? 'uz')]);
+      return;
     }
     const pendingIds = pending.map((m) => m._id);
     const newText = pending.map((m) => m.text).filter(Boolean).join('\n').slice(0, 3000);
@@ -372,7 +381,7 @@ export class ConversationEngine {
     }
     if (containsAny(newText, coachKeywords)) {
       await markProcessed();
-      return this.finishReady(lead, 'wants_coach', false, await this.deps.settings.text('ready_message', lang));
+      return this.finishReady(lead, 'wants_coach', false, await this.deps.settings.text('handover_message', lang));
     }
 
     // a client who already wants to pay is not kept in the questionnaire
@@ -536,7 +545,7 @@ export class ConversationEngine {
         return this.finishReady(lead, 'bot_question', false, await this.deps.settings.text('bot_answer', outLang));
       }
       if (ai.reason === 'wants_coach') {
-        return this.finishReady(lead, 'wants_coach', false, await this.deps.settings.text('ready_message', outLang));
+        return this.finishReady(lead, 'wants_coach', false, await this.deps.settings.text('handover_message', outLang));
       }
       if (asked === 5 && !answers.healthProblems) answers.healthProblems = newText.slice(0, 500);
       lead.answers = answers as never;
@@ -695,6 +704,7 @@ export class ConversationEngine {
       priceList: salesMode ? await s.get('price_list') : undefined,
       paymentDetails: salesMode ? await this.paymentInfoForPrompt(lead) : undefined,
       startInfo: (await s.get('start_info')).trim() || undefined,
+      discountPolicy: salesMode ? (await s.get('discount_policy')).trim() : undefined,
       allowAdvice: await s.bool('allow_advice'),
       photos: photoIds.length,
       lastAiMessages: (await this.recentAiTexts(lead, 3)).reverse(),
@@ -807,12 +817,18 @@ export class ConversationEngine {
 
     if (ai.action === 'URGENT_READY' || markerUrgent) return this.finishReady(lead, 'safety', true, await s.text('ready_message', outLang));
     if (ai.action === 'READY' && ai.reason === 'bot_question') return this.finishReady(lead, 'bot_question', false, await s.text('bot_answer', outLang));
-    if (ai.action === 'READY') return this.finishReady(lead, 'wants_coach', false, out.length ? out.slice(0, 2) : [await s.text('ready_message', outLang)]);
+    if (ai.action === 'READY') return this.finishReady(lead, 'wants_coach', false, out.length ? out.slice(0, 2) : [await s.text('handover_message', outLang)]);
+    if (ai.action === 'SOLD' && ai.reason !== 'paid' && !photoIds.length) {
+      // «agreed» is not a sale: send the payment details (or hand over) instead of closing silently
+      ai.action = 'ASK_NEXT';
+      ai.sales_step = 3;
+      if (!out.length) out.push(await s.text('ack_words', outLang).then((a) => a.split(',')[0].trim() || 'Hop'));
+    }
     if (ai.action === 'SOLD') {
       // optionally the AI stays as the coach's assistant after the sale (the coach still sends the group link)
       if (await s.bool('ai_after_sale')) lead.alwaysOn = true;
       lead.followUpAt = undefined;
-      return this.finishReady(lead, 'sold', false, out.length ? out.slice(0, 2) : [await s.text('ready_message', outLang)]);
+      return this.finishReady(lead, 'sold', false, out.length ? out.slice(0, 2) : ["Rahmat! Tekshirib, guruh linkini yuboraman"]);
     }
     if (ai.action === 'REFUSED') return this.finishReady(lead, 'refused', false, out.slice(0, 2));
     if (ai.action === 'NO_RESPONSE' || (!out.length && !ai.voice_id)) {
@@ -913,6 +929,16 @@ export class ConversationEngine {
     return p;
   }
 
+  private voiceProblemNotifiedAt = 0;
+  /** Tells the admin (at most every 6 hours) that voice notes cannot be transcribed — usually the LLM provider. */
+  private async notifyVoiceProblem(): Promise<void> {
+    if (Date.now() - this.voiceProblemNotifiedAt < 6 * HOUR) return;
+    this.voiceProblemNotifiedAt = Date.now();
+    await this.deps.gateway
+      .notifyAdmins("⚠️ Mijozning ovozli xabarini matnga aylantirib bo'lmadi. Bot mijozdan yozib yuborishni so'radi. Agar bu tez-tez bo'lsa — /status va LLM modelini tekshiring.")
+      .catch(() => undefined);
+  }
+
   /** The client wants to pay but no payment details are configured: one honest line, then the coach (urgent). */
   private async handOverForPayment(lead: LeadDoc, lang: Lang): Promise<void> {
     await this.deps.gateway
@@ -939,11 +965,14 @@ export class ConversationEngine {
    */
   private async enforceCountryPricing(lead: LeadDoc, texts: string[], lang: Lang): Promise<string[]> {
     const code = clientCountry(lead);
+    const perCountryPayment = Boolean(
+      (await this.deps.settings.get('payment_details_kr')).trim() || (await this.deps.settings.get('payment_details_uz')).trim(),
+    );
     const out: string[] = [];
     let asked = false;
     for (const t of texts) {
       if (!code) {
-        if (mentionsPrice(t)) {
+        if (mentionsPrice(t) || (perCountryPayment && PAYMENT_OFFER.test(normalize(t)))) {
           if (!asked) out.push(await this.deps.settings.text('country_question', lang));
           asked = true;
           continue;
@@ -1220,7 +1249,7 @@ export class ConversationEngine {
     await Lead.updateOne(
       { _id: lead._id },
       {
-        $set: { answers: {}, status: 'NEW', mode: 'AI', urgent: false, remindersSent: 0, aiFailures: 0, askCount: 0, skippedSteps: [], currentQuestion: 1, adminCardMessageIds: [], salesStep: 0, salesTurns: 0, followUpsSent: 0, refusalCount: 0, resultsLinkSent: false, commitmentAsked: false, sentVoiceIds: [] },
+        $set: { answers: {}, status: 'NEW', mode: 'AI', urgent: false, remindersSent: 0, aiFailures: 0, askCount: 0, skippedSteps: [], currentQuestion: 1, adminCardMessageIds: [], salesStep: 0, salesTurns: 0, followUpsSent: 0, refusalCount: 0, resultsLinkSent: false, coachNudges: 0, commitmentAsked: false, sentVoiceIds: [] },
         $unset: {
           intent: '', bmi: '', targetBmi: '', readyReason: '', summary: '', summaryMessageCount: '', lastAskedStep: '', pendingSince: '',
           lastClientMessageAt: '', lastOutgoingAt: '', readyAt: '', answeredAt: '', paidAt: '', rejectedAt: '', aiFailureNotifiedAt: '', questionnaireDoneAt: '', soldAt: '', followUpAt: '', followUpNote: '',
@@ -1313,6 +1342,9 @@ function clipFits(clipCountry: string | null | undefined, client: CountryCode | 
   const c = clipCountry ?? 'ALL';
   return c === 'ALL' || c === client;
 }
+
+/** «to'lov ma'lumotini yuboraymi», «karta tashlaymi» — offering payment details. */
+const PAYMENT_OFFER = /(to'lov ma'lumot|karta raqam|kartani|hisob raqam|rekvizit|номер карты|реквизит)/;
 
 const isBareAck = (m: string) => /^(tushunarli|tushundim|aha|zo'r|yaxshi|hop|ok|понятно|ясно|хорошо|ага)[.!]?$/i.test(m.trim());
 
