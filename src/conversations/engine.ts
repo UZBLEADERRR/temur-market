@@ -375,6 +375,19 @@ export class ConversationEngine {
       return this.finishReady(lead, 'wants_coach', false, await this.deps.settings.text('ready_message', lang));
     }
 
+    // a client who already wants to pay is not kept in the questionnaire
+    if (
+      lead.status === 'QUESTIONNAIRE' &&
+      lead.intent !== 'asked' &&
+      (await this.deps.settings.bool('sales_mode')) &&
+      containsAny(newText, splitKeywords(await this.deps.settings.get('payment_request_keywords')))
+    ) {
+      lead.status = 'SALES';
+      lead.questionnaireDoneAt ??= this.now();
+      lead.commitmentAsked = true;
+      await lead.save();
+      logger.info({ leadId: String(lead._id) }, 'Client asked to pay during the questionnaire — straight to payment');
+    }
     if (lead.status === 'SALES') {
       return this.salesTurn(lead, pending.map((m) => m.text), photoIds, lang, markProcessed);
     }
@@ -810,15 +823,24 @@ export class ConversationEngine {
     out.splice(0, out.length, ...(await this.ensureResultsLink(lead, out, newMessages.join('\n'), outLang)));
     // the payment details are sent exactly as the admin wrote them (never retyped by the model)
     const payment = await this.paymentFor(lead);
-    let reachedPayment = (ai.sales_step ?? 0) >= 3;
+    // the client asking for the card is decisive — the model's sales_step is not needed for that
+    const clientAskedPayment = Boolean(containsAny(newMessages.join(' '), splitKeywords(await s.get('payment_request_keywords'))));
+    let reachedPayment = (ai.sales_step ?? 0) >= 3 || clientAskedPayment;
     if (reachedPayment && payment === null) {
       // card depends on the country (won account vs so'm card) and we do not know it yet → ask first
       const q = await s.text('country_question', outLang);
       if (!out.includes(q)) out.push(q);
       reachedPayment = false;
       ai.sales_step = Math.min(ai.sales_step ?? 2, 2);
-    } else if (reachedPayment && payment && step < 3 && !containsPayment(out.join('\n'), payment)) {
-      out.push(payment);
+    } else if (reachedPayment && !payment) {
+      // nothing to send: never promise a card we do not have — hand over to the coach right away
+      return this.handOverForPayment(lead, outLang);
+    } else if (reachedPayment && payment && (step < 3 || clientAskedPayment) && !containsPayment(out.join('\n'), payment)) {
+      // drop the model's «hozir tashlayman»-type promises; the real details follow
+      const promise = /(tashlayman|yuboraman|jo'nataman|скину|отправлю|пришлю)/i;
+      const kept = out.filter((m) => !(promise.test(normalize(m)) && /(karta|raqam|hisob|карт|номер)/i.test(normalize(m))));
+      out.splice(0, out.length, ...kept, payment);
+      ai.sales_step = 3;
     }
     if (ai.follow_up_at) await this.planFollowUp(lead, ai.follow_up_at, ai.follow_up_note ?? '');
     if (commitmentFirst) lead.commitmentAsked = true;
@@ -889,6 +911,15 @@ export class ConversationEngine {
     const p = await this.paymentFor(lead);
     if (p === null) return "davlatga bog'liq (Koreya — won hisob, O'zbekiston — so'm karta). Mijoz davlatini bilmasang, avval so'ra.";
     return p;
+  }
+
+  /** The client wants to pay but no payment details are configured: one honest line, then the coach (urgent). */
+  private async handOverForPayment(lead: LeadDoc, lang: Lang): Promise<void> {
+    await this.deps.gateway
+      .notifyAdmins("⚠️ Mijoz karta so'radi, lekin to'lov ma'lumoti kiritilmagan. Mini ilova → «Murabbiy haqida» → Koreya / O'zbekiston to'lov maydonlarini to'ldiring.")
+      .catch(() => undefined);
+    lead.urgent = true;
+    return this.finishReady(lead, 'payment_request', true, [await this.deps.settings.text('payment_handover_message', lang)]);
   }
 
   /** Tells the model where the client lives and which currency to use (or to ask first). */

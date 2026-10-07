@@ -16,7 +16,8 @@ export type ReadyReason =
   | 'flood'
   | 'send_blocked'
   | 'sold'
-  | 'refused';
+  | 'refused'
+  | 'payment_request';
 
 export interface LeadAnswers {
   height?: number;

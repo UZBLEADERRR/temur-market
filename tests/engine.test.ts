@@ -1239,3 +1239,57 @@ describe('Uzbek in Cyrillic is Uzbek, not Russian', () => {
     expect((await Lead.findOne({ chatId: 171 }))?.language).toBe('ru');
   });
 });
+
+describe('bot2: «karta tashen» always gets the card (or the coach)', () => {
+  const done = {
+    messages: ['Rahmat!'],
+    action: 'READY',
+    reason: 'completed',
+    answered_current: true,
+    extracted: { trainingExperience: '1 yil', goal: 'ozish', trainingDays: 3, trainingLocation: 'zal', previousAttempts: 'reja yo\'q', healthProblems: "yo'q" },
+  };
+  const KR = 'Woori bank: 1002-063-833262\nEgasi: Temur F.\nSumma: 150,000 KRW';
+
+  it('screenshot case: the model says «hozir tashlayman» without sales_step 3 → the real card is sent anyway', async () => {
+    const { engine, gateway, llm, settings } = buildApp();
+    await settings.set({ ask_commitment: false, payment_details_kr: KR });
+    llm.push(done, { messages: ['Boshlaymizmi?'], action: 'ASK_NEXT', sales_step: 2 });
+    await engine.handleClientMessage(clientMsg(180, 'Kurs: 175 82 24, hammasi. Koreadaman'));
+    llm.push({ messages: ["Bo'ldi aka, Koreyadagilar uchun 150,000 KRW", 'Hozir karta raqamni tashlayman'], action: 'ASK_NEXT', sales_step: 2 });
+    await engine.handleClientMessage(clientMsg(180, 'Karta raqam tashen'));
+    const texts = gateway.textsTo(180);
+    expect(texts.at(-1)).toBe(KR);
+    expect(texts).not.toContain('Hozir karta raqamni tashlayman');
+    expect((await Lead.findOne({ chatId: 180 }))?.salesStep).toBe(3);
+    // asked again → sent again
+    llm.push({ messages: ['Mana aka'], action: 'ASK_NEXT', sales_step: 3 });
+    await engine.handleClientMessage(clientMsg(180, 'Qani karta?'));
+    expect(gateway.textsTo(180).filter((t) => t === KR)).toHaveLength(2);
+  });
+
+  it('no payment details configured → no empty promises: one honest line, urgent hand-over to the coach', async () => {
+    const { engine, gateway, llm, settings } = buildApp();
+    await settings.set({ ask_commitment: false, price_list: 'Koreyadagilar uchun: 150,000 KRW', course_info: 'Kurs' });
+    llm.push(done, { messages: ['Boshlaymizmi?'], action: 'ASK_NEXT', sales_step: 2 });
+    await engine.handleClientMessage(clientMsg(181, 'Kurs: 175 82 24, hammasi. Koreadaman'));
+    llm.push({ messages: ['Hozir karta raqamni tashlayman'], action: 'ASK_NEXT', sales_step: 3 });
+    await engine.handleClientMessage(clientMsg(181, 'Karta raqam tashen'));
+    expect(gateway.textsTo(181).at(-1)).toBe("Hop, hozir karta raqamini o'zim tashlayman");
+    const lead = await Lead.findOne({ chatId: 181 });
+    expect(lead?.readyReason).toBe('payment_request');
+    expect(lead?.urgent).toBe(true);
+    expect(lead?.mode).toBe('MANUAL');
+    expect(gateway.admin.some((a) => a.html.includes("KARTA SO'RAYAPTI"))).toBe(true);
+    expect(gateway.admin.some((a) => a.html.includes("to'lov ma'lumoti kiritilmagan"))).toBe(true);
+  });
+
+  it('client wants to pay in the middle of the questionnaire → goes straight to payment', async () => {
+    const { engine, gateway, llm, settings } = buildApp();
+    await settings.set({ payment_details_kr: KR });
+    await engine.handleClientMessage(clientMsg(182, 'Salom, kurs haqida'));
+    llm.push({ messages: ['Zo\'r aka'], action: 'ASK_NEXT', sales_step: 3 });
+    await engine.handleClientMessage(clientMsg(182, "Koreadaman, savollarsiz to'layman, karta tashlang"));
+    expect(gateway.textsTo(182).at(-1)).toBe(KR);
+    expect((await Lead.findOne({ chatId: 182 }))?.status).toBe('SALES');
+  });
+});

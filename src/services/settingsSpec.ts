@@ -111,6 +111,20 @@ Boshqa chet eldagilar uchun: 1,200,000 so'm
     default:
       "natija, natijalar, natijasi, otziv, otzif, otzivlar, isbot, oldin keyin, oldin-keyin, kim ozgan, ozganlar, ishonmayman, ishonsa bo'ladimi, haqiqatdan, результат, отзыв, до и после, кто похудел, доказ",
   },
+  {
+    key: 'payment_request_keywords',
+    label: "Mijoz karta/to'lov so'raganini bildiruvchi so'zlar",
+    group: 'Kalit so\'zlar',
+    type: 'longtext',
+    default:
+      "karta, kartani, karta raqam, kartangiz, hisob raqam, rekvizit, qayerga to'layman, qanday to'layman, to'lov qilaman, to'lamoqchiman, to'layman, pul tashlayman, tashen karta, карта, карту, номер карты, реквизит, куда платить, как оплатить, оплачу, хочу оплатить",
+  },
+  ...q(
+    'payment_handover_message',
+    "To'lov ma'lumoti kiritilmagan bo'lsa mijozga yoziladigan gap",
+    "Hop, hozir karta raqamini o'zim tashlayman",
+    'Хорошо, сейчас сам скину номер карты',
+  ),
   { key: 'max_messages_per_turn', label: 'Bir javobda maksimum xabar soni (ko\'p xabar ishonchsiz ko\'rinadi)', group: 'Xulq', type: 'number', default: 2 },
   { key: 'max_sales_turns', label: "Sotuvda nechta javobdan keyin to'lovga aniq taklif qilinsin", group: 'Xulq', type: 'number', default: 4 },
   {

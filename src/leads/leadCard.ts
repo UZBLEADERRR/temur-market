@@ -24,6 +24,7 @@ const REASON_LABEL: Record<string, string> = {
   send_blocked: 'Telegram yuborishga ruxsat bermadi (pauza?)',
   sold: "💰 Sotildi — guruh linkini yuboring",
   refused: 'Kursdan voz kechdi',
+  payment_request: "💳 Karta so'rayapti — to'lov ma'lumotini yuboring",
 };
 
 export const statusLabel = (s: string) => STATUS_LABEL[s] ?? s;
@@ -37,10 +38,14 @@ export function displayName(lead: Pick<LeadData, 'name' | 'firstName' | 'lastNam
 /** HTML lead card sent to the admin chat (Telegram parse_mode HTML). */
 export function formatLeadCard(lead: LeadData & { _id?: unknown }, timeZone: string): string {
   const a = lead.answers ?? {};
-  const head = lead.urgent
+  const head = lead.readyReason === 'payment_request'
+    ? "💳 <b>KARTA SO'RAYAPTI — to'lov ma'lumotini o'zingiz yuboring</b>"
+    : lead.urgent
     ? '🔴 <b>SHOSHILINCH LEAD</b>'
     : lead.readyReason === 'sold'
       ? "💰 <b>SOTILDI — to'lovni tekshirib, guruh linkini yuboring</b>"
+      : lead.readyReason === 'payment_request'
+        ? "💳 <b>KARTA SO'RAYAPTI — to'lov ma'lumotini o'zingiz yuboring</b>"
       : lead.readyReason === 'refused'
         ? '❌ <b>KURSDAN VOZ KECHDI</b>'
         : lead.status === 'SALES'
