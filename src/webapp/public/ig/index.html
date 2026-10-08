@@ -1,0 +1,1232 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0c0c0d" media="(prefers-color-scheme: dark)">
+<title>Instagram panel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f6f6f5;
+  --surface: #ffffff;
+  --surface-2: #f2f2f1;
+  --surface-3: #e9e9e7;
+  --line: #ebebea;
+  --ink: #0d0d0d;
+  --ink-2: #55554f;
+  --muted: #8d8d87;
+  --accent: #2a78d6;
+  --accent-soft: #e8f1fc;
+  --bubble-in: #efefee;
+  --bubble-out: #111111;
+  --bubble-out-ink: #ffffff;
+  --good: #1f8a4c; --good-soft: #e5f4ea;
+  --warn: #b26a00; --warn-soft: #fbf0dc;
+  --bad: #c43c3c; --bad-soft: #fbe7e7;
+  --info: #2a78d6; --info-soft: #e8f1fc;
+  --chart: #2a78d6;
+  --shadow: 0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.06);
+  --radius: 14px;
+  --ig: linear-gradient(45deg, #f9ce34, #ee2a7b 55%, #6228d7);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0c0c0d; --surface: #151516; --surface-2: #1d1d1f; --surface-3: #2a2a2c; --line: #262628;
+    --ink: #f4f4f2; --ink-2: #b9b9b3; --muted: #85857f;
+    --accent: #3987e5; --accent-soft: #16263a;
+    --bubble-in: #232325; --bubble-out: #f4f4f2; --bubble-out-ink: #0d0d0d;
+    --good: #46c07a; --good-soft: #132a1d; --warn: #e2a33a; --warn-soft: #2e2312; --bad: #ec6b6b; --bad-soft: #321718; --info: #6aa8ee; --info-soft: #16263a;
+    --chart: #3987e5; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0c0c0d; --surface: #151516; --surface-2: #1d1d1f; --surface-3: #2a2a2c; --line: #262628;
+  --ink: #f4f4f2; --ink-2: #b9b9b3; --muted: #85857f;
+  --accent: #3987e5; --accent-soft: #16263a;
+  --bubble-in: #232325; --bubble-out: #f4f4f2; --bubble-out-ink: #0d0d0d;
+  --good: #46c07a; --good-soft: #132a1d; --warn: #e2a33a; --warn-soft: #2e2312; --bad: #ec6b6b; --bad-soft: #321718; --info: #6aa8ee; --info-soft: #16263a;
+  --chart: #3987e5; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 14px/1.45 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent;
+}
+button, input, textarea, select { font: inherit; color: inherit; }
+button { cursor: pointer; border: 0; background: none; padding: 0; }
+a { color: inherit; }
+svg { display: block; }
+.ic { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.ic.sm { width: 16px; height: 16px; }
+
+/* ── shell ── */
+.app { display: grid; grid-template-columns: 240px 1fr; height: 100dvh; }
+.side { background: var(--surface); border-right: 1px solid var(--line); display: flex; flex-direction: column; padding: 18px 12px; gap: 4px; }
+.brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 18px; }
+.ring { width: 36px; height: 36px; border-radius: 50%; background: var(--ig); padding: 2px; flex: none; }
+.ring > * { width: 100%; height: 100%; border-radius: 50%; border: 2px solid var(--surface); background: var(--surface-2); display: grid; place-items: center; overflow: hidden; font-weight: 600; font-size: 13px; }
+.ring img { object-fit: cover; }
+.brand b { display: block; font-size: 14px; }
+.brand small { color: var(--muted); font-size: 12px; }
+.nav { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px; color: var(--ink-2); font-weight: 500; width: 100%; text-align: left; position: relative; }
+.nav:hover { background: var(--surface-2); color: var(--ink); }
+.nav.on { background: var(--surface-2); color: var(--ink); }
+.nav .count { margin-left: auto; background: var(--ink); color: var(--surface); border-radius: 999px; font-size: 11px; font-weight: 600; padding: 1px 7px; }
+.side .spacer { flex: 1; }
+.conn { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 10px; color: var(--ink-2); font-size: 12.5px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+.dot.good { background: var(--good); } .dot.bad { background: var(--bad); } .dot.warn { background: var(--warn); }
+main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.tabbar { display: none; }
+
+.page { flex: 1; min-height: 0; overflow-y: auto; }
+.wrap { max-width: 1080px; margin: 0 auto; padding: 28px 32px 48px; }
+.head { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+.head h1 { font-size: 22px; letter-spacing: -0.02em; margin: 0; font-weight: 600; }
+.head p { margin: 2px 0 0; color: var(--muted); }
+.head .grow { flex: 1; }
+
+/* ── controls ── */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 36px; padding: 0 14px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); font-weight: 500; white-space: nowrap; }
+.btn:hover { background: var(--surface-2); }
+.btn.primary { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.btn.primary:hover { opacity: .9; }
+.btn.ghost { border-color: transparent; background: transparent; }
+.btn.ghost:hover { background: var(--surface-2); }
+.btn.danger { color: var(--bad); }
+.btn.sm { height: 30px; padding: 0 10px; font-size: 13px; border-radius: 8px; }
+.btn:disabled { opacity: .5; cursor: default; }
+.iconbtn { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 10px; color: var(--ink-2); }
+.iconbtn:hover { background: var(--surface-2); color: var(--ink); }
+.input, .textarea, .select { width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; outline: none; transition: border-color .15s; }
+.input:focus, .textarea:focus, .select:focus { border-color: var(--ink-2); }
+.textarea { resize: vertical; min-height: 84px; line-height: 1.5; }
+.search { position: relative; }
+.search .ic { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--muted); }
+.search .input { padding-left: 36px; background: var(--surface-2); border-color: transparent; }
+.search .input:focus { background: var(--surface); border-color: var(--line); }
+.chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+.chips::-webkit-scrollbar { display: none; }
+.chip { height: 30px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink-2); font-size: 13px; font-weight: 500; white-space: nowrap; }
+.chip.on { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.seg { display: inline-flex; background: var(--surface-2); border-radius: 10px; padding: 3px; gap: 2px; }
+.seg button { height: 30px; padding: 0 12px; border-radius: 8px; color: var(--ink-2); font-weight: 500; font-size: 13px; }
+.seg button.on { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.switch { width: 40px; height: 24px; border-radius: 999px; background: var(--surface-3); position: relative; transition: background .2s; flex: none; }
+.switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.2); transition: transform .2s; }
+.switch.on { background: var(--good); }
+.switch.on::after { transform: translateX(16px); }
+.pill { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 999px; font-size: 12px; font-weight: 500; background: var(--surface-2); color: var(--ink-2); white-space: nowrap; }
+.pill.good { background: var(--good-soft); color: var(--good); }
+.pill.warn { background: var(--warn-soft); color: var(--warn); }
+.pill.bad { background: var(--bad-soft); color: var(--bad); }
+.pill.blue { background: var(--info-soft); color: var(--info); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+.card.pad { padding: 20px; }
+.muted { color: var(--muted); }
+.small { font-size: 12.5px; }
+.label { font-size: 12px; color: var(--muted); font-weight: 500; margin-bottom: 6px; display: block; }
+.field { margin-bottom: 16px; }
+.hint { font-size: 12.5px; color: var(--muted); margin-top: 6px; }
+.empty { text-align: center; color: var(--muted); padding: 56px 20px; }
+.empty .ic { width: 32px; height: 32px; margin: 0 auto 12px; stroke-width: 1.5; }
+.avatar { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; font-weight: 600; font-size: 15px; flex: none; color: var(--ink); background: var(--surface-3); }
+.avatar.sm { width: 32px; height: 32px; font-size: 12px; }
+.skeleton { background: linear-gradient(90deg, var(--surface-2), var(--surface-3), var(--surface-2)); background-size: 200% 100%; animation: sh 1.2s infinite; border-radius: 8px; }
+@keyframes sh { to { background-position: -200% 0; } }
+
+/* ── Direct ── */
+.inbox { flex: 1; min-height: 0; display: grid; grid-template-columns: 360px 1fr; }
+.inbox.details { grid-template-columns: 360px 1fr 300px; }
+.list { border-right: 1px solid var(--line); background: var(--surface); display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.list-head { padding: 22px 16px 12px; display: flex; flex-direction: column; gap: 12px; }
+.list-head h1 { font-size: 22px; margin: 0; font-weight: 600; letter-spacing: -.02em; }
+.rows { flex: 1; overflow-y: auto; padding: 0 8px 12px; }
+.row { display: flex; gap: 12px; align-items: center; padding: 10px 10px; border-radius: 12px; width: 100%; text-align: left; }
+.row:hover { background: var(--surface-2); }
+.row.on { background: var(--surface-2); }
+.row .meta { min-width: 0; flex: 1; }
+.row .top { display: flex; align-items: center; gap: 6px; }
+.row .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .time { margin-left: auto; color: var(--muted); font-size: 12px; flex: none; }
+.row .preview { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; margin-top: 1px; display: flex; gap: 6px; align-items: center; }
+.row .preview span { overflow: hidden; text-overflow: ellipsis; }
+.row.unread .preview { color: var(--ink); font-weight: 500; }
+.udot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
+.tags { display: flex; gap: 4px; margin-top: 5px; }
+.tags .pill { height: 19px; font-size: 11px; padding: 0 6px; }
+
+.chat { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--bg); }
+.chat-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: var(--surface); border-bottom: 1px solid var(--line); min-height: 64px; }
+.chat-head .who { min-width: 0; flex: 1; }
+.chat-head .who b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chat-head .who a { color: var(--muted); font-size: 12.5px; text-decoration: none; }
+.chat-head .who a:hover { text-decoration: underline; }
+.aitoggle { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; color: var(--ink-2); padding: 6px 8px 6px 12px; border-radius: 999px; background: var(--surface-2); }
+.back { display: none; }
+.msgs { flex: 1; overflow-y: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 2px; }
+.day { align-self: center; font-size: 12px; color: var(--muted); margin: 14px 0 8px; font-weight: 500; }
+.msg { max-width: min(560px, 78%); display: flex; flex-direction: column; }
+.msg.in { align-self: flex-start; }
+.msg.out { align-self: flex-end; align-items: flex-end; }
+.bubble { padding: 9px 13px; border-radius: 20px; white-space: pre-wrap; word-wrap: break-word; line-height: 1.4; }
+.in .bubble { background: var(--bubble-in); }
+.out .bubble { background: var(--bubble-out); color: var(--bubble-out-ink); }
+.out.coach .bubble { background: var(--accent); color: #fff; }
+.msg .by { font-size: 11px; color: var(--muted); margin: 3px 8px 8px; display: flex; gap: 4px; align-items: center; }
+.msg.grouped .by { display: none; }
+.msg.grouped { margin-bottom: 0; }
+.origin { align-self: center; max-width: 460px; width: 100%; display: flex; gap: 10px; padding: 12px 14px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); margin: 6px 0 12px; font-size: 13px; }
+.origin .ic { color: var(--muted); margin-top: 1px; }
+.banner { margin: 0; padding: 8px 16px; font-size: 12.5px; background: var(--warn-soft); color: var(--warn); display: flex; align-items: center; gap: 8px; }
+.compose { display: flex; gap: 8px; align-items: flex-end; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); background: var(--surface); border-top: 1px solid var(--line); }
+.compose textarea { flex: 1; resize: none; max-height: 140px; min-height: 42px; border-radius: 21px; padding: 10px 16px; background: var(--surface-2); border: 1px solid transparent; outline: none; line-height: 1.4; }
+.compose textarea:focus { border-color: var(--line); background: var(--surface); }
+.send { width: 42px; height: 42px; border-radius: 50%; background: var(--ink); color: var(--surface); display: grid; place-items: center; flex: none; }
+.send:disabled { opacity: .35; }
+.nochat { flex: 1; display: grid; place-items: center; color: var(--muted); text-align: center; }
+.nochat .ring { width: 72px; height: 72px; margin: 0 auto 14px; }
+
+.info { border-left: 1px solid var(--line); background: var(--surface); overflow-y: auto; padding: 20px; }
+.info h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 22px 0 10px; font-weight: 600; }
+.info h3:first-child { margin-top: 0; }
+.kv { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+.kv div span { display: block; font-size: 11.5px; color: var(--muted); }
+.kv div b { font-weight: 500; font-size: 13.5px; word-break: break-word; }
+.kv .wide { grid-column: 1 / -1; }
+.actions { display: flex; flex-direction: column; gap: 6px; }
+.actions .btn { justify-content: flex-start; }
+
+/* ── comments ── */
+.feed { display: flex; flex-direction: column; gap: 10px; }
+.cmt { padding: 16px; display: flex; gap: 12px; }
+.cmt .body { flex: 1; min-width: 0; }
+.cmt .line1 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cmt .line1 b { font-weight: 600; }
+.cmt .text { margin: 4px 0 8px; font-size: 14.5px; word-wrap: break-word; }
+.trail { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--ink-2); border-left: 2px solid var(--line); padding-left: 10px; margin: 8px 0 10px; }
+.trail .ic { display: inline-block; vertical-align: -3px; margin-right: 4px; color: var(--muted); }
+.cmt .acts { display: flex; gap: 6px; flex-wrap: wrap; }
+.inline-reply { display: flex; gap: 6px; margin-top: 10px; }
+.err { color: var(--bad); font-size: 12.5px; margin-bottom: 8px; }
+
+/* ── automations ── */
+.rules { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+.rule { padding: 18px; display: flex; flex-direction: column; gap: 12px; cursor: pointer; transition: box-shadow .15s, border-color .15s; text-align: left; }
+.rule:hover { box-shadow: var(--shadow); border-color: transparent; }
+.rule .r1 { display: flex; align-items: center; gap: 10px; }
+.rule .r1 b { flex: 1; font-size: 15px; font-weight: 600; }
+.scope { display: flex; align-items: center; gap: 10px; color: var(--ink-2); font-size: 13px; }
+.thumb { width: 40px; height: 40px; border-radius: 8px; background: var(--surface-3) center/cover; flex: none; }
+.allposts { width: 40px; height: 40px; border-radius: 8px; background: var(--surface-2); display: grid; place-items: center; color: var(--ink-2); flex: none; }
+.kw { display: flex; flex-wrap: wrap; gap: 5px; }
+.kw .pill { background: var(--surface-2); }
+.rstats { display: flex; gap: 16px; color: var(--muted); font-size: 12.5px; border-top: 1px solid var(--line); padding-top: 12px; }
+.rstats b { color: var(--ink); font-weight: 600; }
+.dm-preview { background: var(--bg); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 6px; }
+.dm-preview .bubble { align-self: flex-end; max-width: 85%; background: var(--bubble-out); color: var(--bubble-out-ink); }
+.dm-preview .bubble.in { align-self: flex-start; background: var(--bubble-in); color: var(--ink); }
+.replies { display: flex; flex-direction: column; gap: 6px; }
+.replies .r { display: flex; gap: 6px; }
+.media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 6px; max-height: 300px; overflow-y: auto; }
+.media-grid button { aspect-ratio: 1; border-radius: 8px; background: var(--surface-3) center/cover; position: relative; outline: 2px solid transparent; outline-offset: 2px; }
+.media-grid button.on { outline-color: var(--ink); }
+.media-grid .all { display: grid; place-items: center; font-size: 12px; font-weight: 500; color: var(--ink-2); background: var(--surface-2); text-align: center; padding: 6px; }
+.tagsinput { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); min-height: 42px; align-items: center; }
+.tagsinput .pill { background: var(--surface-2); color: var(--ink); height: 26px; padding: 0 4px 0 10px; }
+.tagsinput .pill button { width: 18px; height: 18px; display: grid; place-items: center; border-radius: 50%; color: var(--muted); }
+.tagsinput input { flex: 1; min-width: 120px; border: 0; outline: none; background: transparent; padding: 4px 6px; }
+
+/* ── stats ── */
+.kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+@media (max-width: 1280px) { .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.kpi { padding: 16px 18px; }
+.kpi span { color: var(--muted); font-size: 12.5px; font-weight: 500; }
+.kpi b { display: block; font-size: 28px; font-weight: 600; letter-spacing: -.02em; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.grid2 { display: grid; grid-template-columns: 1.5fr 1fr; gap: 16px; }
+.card h2 { font-size: 15px; margin: 0; font-weight: 600; }
+.card .ch { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.card .ch .grow { flex: 1; }
+.chartbox { position: relative; height: 220px; }
+.chartbox svg { width: 100%; height: 100%; overflow: visible; }
+.chartbox .axis { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.chartbox .grid { stroke: var(--line); stroke-width: 1; }
+.chartbox .bar { fill: var(--chart); }
+.chartbox .bar.dim { opacity: .35; }
+.chartbox .hit { fill: transparent; cursor: default; }
+.tip { position: absolute; pointer-events: none; background: var(--ink); color: var(--surface); padding: 6px 10px; border-radius: 8px; font-size: 12px; white-space: nowrap; transform: translate(-50%, -100%); opacity: 0; transition: opacity .1s; z-index: 2; }
+.tip b { font-weight: 600; }
+.table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.table th, .table td { text-align: left; padding: 7px 4px; border-bottom: 1px solid var(--line); }
+.table th { color: var(--muted); font-weight: 500; font-size: 12px; }
+.funnel { display: flex; flex-direction: column; gap: 14px; }
+.fstep .fl { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px; }
+.fstep .fl span { color: var(--ink-2); }
+.fstep .fl b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.fstep .fl i { font-style: normal; color: var(--muted); font-weight: 400; margin-left: 6px; }
+.fbar { height: 10px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
+.fbar div { height: 100%; background: var(--chart); border-radius: 0 4px 4px 0; }
+
+/* ── settings ── */
+.settings { display: flex; flex-direction: column; gap: 16px; max-width: 760px; }
+.acc { display: flex; align-items: center; gap: 14px; }
+.acc .ring { width: 56px; height: 56px; }
+.acc b { font-size: 16px; }
+.setrow { display: flex; align-items: center; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.setrow:last-child { border-bottom: 0; padding-bottom: 0; }
+.setrow:first-of-type { padding-top: 0; }
+.setrow .t { flex: 1; }
+.setrow .t b { display: block; font-weight: 500; }
+.setrow .t span { color: var(--muted); font-size: 12.5px; }
+.setrow .input { width: 96px; text-align: right; }
+.copy { display: flex; gap: 6px; }
+.copy .input { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; background: var(--surface-2); }
+.steps { margin: 0; padding-left: 20px; color: var(--ink-2); display: flex; flex-direction: column; gap: 6px; }
+
+/* ── overlays ── */
+.scrim { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 40; display: flex; justify-content: flex-end; animation: fade .15s; }
+@keyframes fade { from { opacity: 0; } }
+.sheet { width: min(520px, 100%); height: 100%; background: var(--surface); display: flex; flex-direction: column; animation: slide .2s ease-out; }
+@keyframes slide { from { transform: translateX(24px); opacity: 0; } }
+.sheet-head { display: flex; align-items: center; gap: 8px; padding: 14px 16px 14px 20px; border-bottom: 1px solid var(--line); }
+.sheet-head h2 { flex: 1; margin: 0; font-size: 16px; font-weight: 600; }
+.sheet-body { flex: 1; overflow-y: auto; padding: 20px; }
+.sheet-foot { display: flex; gap: 8px; padding: 12px 20px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); }
+.sheet-foot .grow { flex: 1; }
+.dialog-wrap { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 50; display: grid; place-items: center; padding: 20px; animation: fade .15s; }
+.dialog { background: var(--surface); border-radius: 16px; padding: 22px; width: min(380px, 100%); box-shadow: var(--shadow); }
+.dialog h3 { margin: 0 0 6px; font-size: 16px; }
+.dialog p { margin: 0 0 18px; color: var(--ink-2); }
+.dialog .row2 { display: flex; gap: 8px; justify-content: flex-end; }
+.menu { position: fixed; z-index: 45; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 6px; min-width: 210px; }
+.menu button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; border-radius: 8px; text-align: left; }
+.menu button:hover { background: var(--surface-2); }
+.menu button.danger { color: var(--bad); }
+.toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); background: var(--ink); color: var(--surface); padding: 10px 16px; border-radius: 12px; font-weight: 500; z-index: 60; box-shadow: var(--shadow); animation: up .2s; max-width: calc(100% - 32px); }
+@keyframes up { from { transform: translate(-50%, 8px); opacity: 0; } }
+.login { min-height: 100dvh; display: grid; place-items: center; padding: 24px; text-align: center; }
+.login .ring { width: 72px; height: 72px; margin: 0 auto 18px; }
+.login h1 { font-size: 22px; margin: 0 0 8px; }
+.login p { color: var(--ink-2); max-width: 340px; margin: 0 auto; }
+.login code { background: var(--surface-2); padding: 2px 6px; border-radius: 6px; }
+
+/* ── responsive ── */
+@media (max-width: 1240px) { .inbox.details { grid-template-columns: 340px 1fr; } .inbox.details .info { display: none; } }
+@media (max-width: 1100px) { .grid2 { grid-template-columns: 1fr; } }
+@media (max-width: 960px) {
+  .app { grid-template-columns: 1fr; height: 100dvh; }
+  .side { display: none; }
+  main { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
+  .app.chatting main { padding-bottom: 0; }
+  .tabbar { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; background: var(--surface); border-top: 1px solid var(--line); padding: 6px 4px env(safe-area-inset-bottom); }
+  .app.chatting .tabbar { display: none; }
+  .tab { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 0; color: var(--muted); font-size: 10.5px; font-weight: 500; position: relative; }
+  .tab.on { color: var(--ink); }
+  .tab .count { position: absolute; top: 2px; left: calc(50% + 6px); background: var(--bad); color: #fff; border-radius: 999px; font-size: 10px; padding: 0 5px; line-height: 16px; }
+  .wrap { padding: 18px 16px 32px; }
+  .head h1 { font-size: 20px; }
+  .inbox, .inbox.details { grid-template-columns: minmax(0, 1fr); }
+  .inbox .chat, .inbox .info { display: none; }
+  .inbox.open .list { display: none; }
+  .inbox.open .chat { display: flex; }
+  .list { border-right: 0; }
+  .list-head { padding: 16px 16px 10px; }
+  .back { display: grid; margin-left: -8px; }
+  .chat-head { padding: 10px 12px; min-height: 58px; }
+  .aitoggle span { display: none; }
+  .aitoggle { padding: 6px; }
+  .msgs { padding: 14px 12px; }
+  .msg { max-width: 84%; }
+  .sheet { width: 100%; height: auto; max-height: 92dvh; margin-top: auto; border-radius: 18px 18px 0 0; animation: rise .22s ease-out; }
+  .scrim { align-items: flex-end; }
+  @keyframes rise { from { transform: translateY(30px); opacity: 0; } }
+  .rules { grid-template-columns: 1fr; }
+  .kpi b { font-size: 24px; }
+  .menu { left: 12px !important; right: 12px; bottom: 12px; top: auto !important; }
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="i-direct" viewBox="0 0 24 24"><path d="M22 3 9.5 13.5"/><path d="M22 3 15 21l-3.5-7.5L4 10z"/></symbol>
+    <symbol id="i-comment" viewBox="0 0 24 24"><path d="M20.5 11.5a8.4 8.4 0 0 1-12.2 7.5L3.5 20.5l1.5-4.6A8.4 8.4 0 1 1 20.5 11.5z"/></symbol>
+    <symbol id="i-zap" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M22 20H2"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></symbol>
+    <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M10.6 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-2.2 3.1"/><path d="M6.6 6.6A17 17 0 0 0 2 12s3.5 7 10 7a9.7 9.7 0 0 0 5.4-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/><path d="m2 2 20 20"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></symbol>
+    <symbol id="i-reply" viewBox="0 0 24 24"><path d="m9 17-5-5 5-5"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 16v-5"/><path d="M12 8h.01"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></symbol>
+  </defs>
+</svg>
+
+<script>
+(() => {
+'use strict';
+const tg = window.Telegram && window.Telegram.WebApp;
+const inTelegram = Boolean(tg && tg.initData);
+if (inTelegram) {
+  try { tg.ready(); tg.expand(); document.documentElement.dataset.theme = tg.colorScheme === 'dark' ? 'dark' : 'light'; } catch (e) {}
+}
+
+// ── session: Telegram initData inside Telegram, signed link (#s=…) in a browser ──
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+  del(k) { try { localStorage.removeItem(k); } catch (e) {} },
+};
+const hashSession = /(?:^#|&)s=([^&]+)/.exec(location.hash);
+if (hashSession) {
+  store.set('ig_session', decodeURIComponent(hashSession[1]));
+  history.replaceState(null, '', location.pathname + '#/direct');
+}
+let memSession = hashSession ? decodeURIComponent(hashSession[1]) : store.get('ig_session');
+
+const $ = (sel, el = document) => el.querySelector(sel);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const icon = (id, cls = '') => `<svg class="ic ${cls}"><use href="#i-${id}"/></svg>`;
+const root = $('#root');
+
+class AuthError extends Error {}
+async function api(path, opts = {}) {
+  const headers = { 'content-type': 'application/json' };
+  if (inTelegram) headers['x-telegram-init-data'] = tg.initData;
+  else if (memSession) headers['x-admin-session'] = memSession;
+  const res = await fetch('/api' + path, { method: opts.method || 'GET', headers, body: opts.body ? JSON.stringify(opts.body) : undefined });
+  if (res.status === 401) throw new AuthError('unauthorized');
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Xatolik yuz berdi');
+  return data;
+}
+
+// ── small helpers ──
+const STATUS = {
+  NEW: ['Yangi', ''], QUESTIONNAIRE: ['Anketa', ''], SALES: ['Sotuvda', 'blue'], READY: ['Javob kutyapti', 'warn'],
+  ANSWERED: ['Javob berildi', ''], PAID: ["To'ladi", 'good'], REJECTED: ['Rad etdi', 'bad'],
+};
+const statusPill = (s, reason) => {
+  if (reason === 'sold' && s !== 'PAID') return `<span class="pill good">Sotildi</span>`;
+  const [t, tone] = STATUS[s] || [s, ''];
+  return `<span class="pill ${tone}">${esc(t)}</span>`;
+};
+const initials = (n) => (String(n || '?').replace(/^@/, '').split(/[\s._]+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('') || '?').toUpperCase();
+const avatar = (name, cls = '') => `<div class="avatar ${cls}">${esc(initials(name))}</div>`;
+const pad = (n) => String(n).padStart(2, '0');
+function timeShort(d) {
+  if (!d) return '';
+  const t = new Date(d), now = new Date();
+  const days = Math.floor((new Date(now.toDateString()) - new Date(t.toDateString())) / 864e5);
+  if (days === 0) return `${pad(t.getHours())}:${pad(t.getMinutes())}`;
+  if (days === 1) return 'Kecha';
+  if (days < 7) return ['Yak', 'Dush', 'Sesh', 'Chor', 'Pay', 'Jum', 'Shan'][t.getDay()];
+  return `${pad(t.getDate())}.${pad(t.getMonth() + 1)}`;
+}
+const hm = (d) => { const t = new Date(d); return `${pad(t.getHours())}:${pad(t.getMinutes())}`; };
+const MONTHS = ['yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun', 'iyul', 'avgust', 'sentabr', 'oktabr', 'noyabr', 'dekabr'];
+function dayLabel(d) {
+  const t = new Date(d), now = new Date();
+  const days = Math.floor((new Date(now.toDateString()) - new Date(t.toDateString())) / 864e5);
+  if (days === 0) return 'Bugun';
+  if (days === 1) return 'Kecha';
+  return `${t.getDate()}-${MONTHS[t.getMonth()]}`;
+}
+function ago(d) {
+  if (!d) return '—';
+  const m = Math.round((Date.now() - new Date(d)) / 60000);
+  if (m < 1) return 'hozirgina';
+  if (m < 60) return `${m} daqiqa oldin`;
+  if (m < 1440) return `${Math.round(m / 60)} soat oldin`;
+  return `${Math.round(m / 1440)} kun oldin`;
+}
+function toast(msg) {
+  document.querySelectorAll('.toast').forEach((t) => t.remove());
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 2600);
+}
+function confirmBox(title, text, okText = 'Ha', danger = false) {
+  return new Promise((resolve) => {
+    const w = document.createElement('div');
+    w.className = 'dialog-wrap';
+    w.innerHTML = `<div class="dialog" role="dialog"><h3>${esc(title)}</h3><p>${esc(text)}</p><div class="row2"><button class="btn" data-a="no">Bekor</button><button class="btn ${danger ? 'danger' : 'primary'}" data-a="ok">${esc(okText)}</button></div></div>`;
+    w.addEventListener('click', (e) => {
+      const a = e.target.closest('[data-a]');
+      if (e.target === w || a) { w.remove(); resolve(a ? a.dataset.a === 'ok' : false); }
+    });
+    document.body.appendChild(w);
+  });
+}
+function menu(anchor, items) {
+  document.querySelectorAll('.menu').forEach((m) => m.remove());
+  const m = document.createElement('div');
+  m.className = 'menu';
+  m.innerHTML = items.map((it, i) => `<button data-i="${i}" class="${it.danger ? 'danger' : ''}">${icon(it.icon, 'sm')}${esc(it.text)}</button>`).join('');
+  const r = anchor.getBoundingClientRect();
+  m.style.top = `${r.bottom + 6}px`;
+  m.style.left = `${Math.max(12, r.right - 220)}px`;
+  document.body.appendChild(m);
+  const close = (e) => { if (!m.contains(e.target)) { m.remove(); document.removeEventListener('pointerdown', close, true); } };
+  setTimeout(() => document.addEventListener('pointerdown', close, true));
+  m.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-i]');
+    if (!b) return;
+    m.remove();
+    document.removeEventListener('pointerdown', close, true);
+    items[Number(b.dataset.i)].run();
+  });
+}
+async function copy(text) {
+  try { await navigator.clipboard.writeText(text); toast('Nusxa olindi'); }
+  catch (e) { toast('Nusxa olib bo\'lmadi'); }
+}
+
+// ── state & routing ──
+const state = {
+  view: 'direct', leadId: null, filter: 'all', q: '', convs: [], lead: null, messages: [],
+  commentFilter: '', comments: [], rules: [], status: null, settings: null, overview: null, metric: 'comments', showTable: false, hideInfo: false,
+};
+const NAV = [
+  ['direct', 'direct', 'Direct'],
+  ['comments', 'comment', 'Kommentlar'],
+  ['automations', 'zap', 'Avtomatlar'],
+  ['stats', 'chart', 'Statistika'],
+  ['settings', 'gear', 'Sozlamalar'],
+];
+function parseRoute() {
+  const [, view = 'direct', id = null] = (location.hash || '#/direct').split('/');
+  state.view = NAV.some((n) => n[0] === view) ? view : 'direct';
+  state.leadId = state.view === 'direct' ? id : null;
+}
+function go(hash) { if (location.hash !== hash) location.hash = hash; else render(); }
+window.addEventListener('hashchange', () => { parseRoute(); state.lead = null; state.messages = []; render(); load(); });
+
+let timers = [];
+function every(ms, fn) { timers.push(setInterval(() => { if (!document.hidden) fn().catch(handleErr); }, ms)); }
+function clearTimers() { timers.forEach(clearInterval); timers = []; }
+function handleErr(err) {
+  if (err instanceof AuthError) return showLogin();
+  console.error(err);
+}
+
+function showLogin() {
+  clearTimers();
+  store.del('ig_session');
+  root.innerHTML = `<div class="login"><div>
+    <div class="ring"><div>${icon('direct')}</div></div>
+    <h1>Instagram panel</h1>
+    <p>Kirish uchun Telegram'da botga <code>/instagram</code> deb yozing va «Brauzerda ochish» tugmasini bosing yoki panelni Telegram ichida oching.</p>
+  </div></div>`;
+}
+
+// ── shell ──
+function shell(inner) {
+  const st = state.status;
+  const waiting = state.overview ? state.overview.waiting : 0;
+  const connected = st && st.connected;
+  const sideNav = NAV.map(([v, ic, t]) => `<button class="nav ${state.view === v ? 'on' : ''}" data-go="#/${v}">${icon(ic)}${t}${v === 'direct' && waiting ? `<span class="count">${waiting}</span>` : ''}</button>`).join('');
+  const tabs = NAV.map(([v, ic, t]) => `<button class="tab ${state.view === v ? 'on' : ''}" data-go="#/${v}">${icon(ic)}<span>${t}</span>${v === 'direct' && waiting ? `<span class="count">${waiting}</span>` : ''}</button>`).join('');
+  return `<div class="app ${state.view === 'direct' && state.leadId ? 'chatting' : ''}">
+    <aside class="side">
+      <div class="brand"><div class="ring">${st && st.pictureUrl ? `<img src="${esc(st.pictureUrl)}" alt="">` : `<div>${icon('direct', 'sm')}</div>`}</div>
+        <div><b>${st && st.username ? '@' + esc(st.username) : 'Instagram'}</b><small>AI sotuvchi</small></div></div>
+      ${sideNav}
+      <div class="spacer"></div>
+      <button class="conn" data-go="#/settings"><span class="dot ${connected ? 'good' : st ? 'bad' : ''}"></span>${connected ? 'Ulangan' : st ? 'Ulanmagan' : '…'}${st && st.lastWebhookAt ? ` · ${esc(ago(st.lastWebhookAt))}` : ''}</button>
+    </aside>
+    <main>${inner}</main>
+    <nav class="tabbar">${tabs}</nav>
+  </div>`;
+}
+
+function render() {
+  let inner = '';
+  if (state.view === 'direct') inner = viewDirect();
+  else if (state.view === 'comments') inner = viewComments();
+  else if (state.view === 'automations') inner = viewAutomations();
+  else if (state.view === 'stats') inner = viewStats();
+  else inner = viewSettings();
+  // keep what the admin is typing across re-renders
+  const draft = $('#compose-text');
+  const draftVal = draft ? draft.value : null;
+  const act = document.activeElement;
+  const focusId = act && act.id && root.contains(act) ? act.id : null;
+  const sel = focusId && 'selectionStart' in act ? [act.selectionStart, act.selectionEnd] : null;
+  const scroller = $('.msgs');
+  const nearBottom = scroller ? scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 80 : true;
+  const listScroll = $('.rows') ? $('.rows').scrollTop : 0;
+  const pageScroll = $('.page') ? $('.page').scrollTop : 0;
+  root.innerHTML = shell(inner);
+  if (draftVal !== null && $('#compose-text')) { $('#compose-text').value = draftVal; autosize($('#compose-text')); }
+  const back = focusId && document.getElementById(focusId);
+  if (back) { back.focus({ preventScroll: true }); if (sel) try { back.setSelectionRange(sel[0], sel[1]); } catch (e) {} }
+  if ($('.rows')) $('.rows').scrollTop = listScroll;
+  if ($('.page')) $('.page').scrollTop = pageScroll;
+  const m = $('.msgs');
+  if (m && nearBottom) m.scrollTop = m.scrollHeight;
+  if (state.view === 'stats') drawChart();
+}
+
+// ── Direct ──
+const FILTERS = [['all', 'Hammasi'], ['ai', 'AI yozyapti'], ['waiting', 'Javob kutyapti'], ['sales', 'Sotuvda'], ['sold', 'Sotildi'], ['manual', "Qo'lda"]];
+function viewDirect() {
+  const rows = state.convs.length
+    ? state.convs.map((c) => {
+        const who = c.last ? (c.last.sender === 'client' ? '' : c.last.sender === 'ai' ? 'AI: ' : 'Siz: ') : '';
+        return `<button class="row ${state.leadId === c.id ? 'on' : ''} ${c.unread ? 'unread' : ''}" data-go="#/direct/${c.id}">
+          ${avatar(c.username || c.name)}
+          <div class="meta">
+            <div class="top"><span class="name">${esc(c.username ? c.username : c.name)}</span><span class="time">${esc(timeShort(c.updatedAt))}</span></div>
+            <div class="preview"><span>${esc(who)}${esc((c.last && c.last.text) || '')}</span>${c.unread ? '<i class="udot"></i>' : ''}</div>
+            <div class="tags">${statusPill(c.status, c.readyReason)}${c.mode === 'AI' ? (c.paused ? '<span class="pill warn">Pauza</span>' : '<span class="pill">AI</span>') : ''}${c.fromComment ? '<span class="pill">Komment</span>' : ''}${c.country ? `<span class="pill">${esc(c.country)}</span>` : ''}</div>
+          </div></button>`;
+      }).join('')
+    : `<div class="empty">${icon('direct')}${state.loaded ? (state.q || state.filter !== 'all' ? 'Hech narsa topilmadi' : "Hali Direct xabarlar yo'q.<br>Mijoz yozishi bilan shu yerda ko'rinadi.") : 'Yuklanmoqda…'}</div>`;
+  const list = `<section class="list">
+    <div class="list-head">
+      <h1>Direct</h1>
+      <label class="search">${icon('search', 'sm')}<input id="search" class="input" placeholder="Qidirish" value="${esc(state.q)}" autocomplete="off"></label>
+      <div class="chips">${FILTERS.map(([k, t]) => `<button class="chip ${state.filter === k ? 'on' : ''}" data-filter="${k}">${t}</button>`).join('')}</div>
+    </div>
+    <div class="rows">${rows}</div>
+  </section>`;
+  return `<div class="inbox ${state.leadId ? 'open' : ''} ${state.leadId && !state.hideInfo ? 'details' : ''}">${list}${state.leadId ? viewChat() : `<section class="chat"><div class="nochat"><div><div class="ring"><div>${icon('direct')}</div></div><b>Suhbatni tanlang</b><div class="small">AI mijozlar bilan Temurning uslubida yozishyapti</div></div></div></section>`}</div>`;
+}
+
+function viewChat() {
+  const l = state.lead;
+  if (!l) return `<section class="chat"><div class="chat-head"><button class="iconbtn back" data-go="#/direct">${icon('back')}</button><div class="skeleton" style="width:160px;height:16px"></div></div><div class="msgs"></div></section><aside class="info"></aside>`;
+  const ai = l.mode === 'AI';
+  const paused = l.aiPausedUntil && new Date(l.aiPausedUntil) > new Date();
+  const name = l.username || l.displayName;
+  let lastDay = '', prev = null;
+  const bubbles = state.messages.map((m, i) => {
+    let out = '';
+    const dl = dayLabel(m.createdAt);
+    if (dl !== lastDay) { out += `<div class="day">${esc(dl)}</div>`; lastDay = dl; prev = null; }
+    if (m.kind === 'comment') {
+      prev = null;
+      return out + `<div class="origin">${icon('comment', 'sm')}<div><div class="muted small">Postga komment yozdi</div>${esc(m.text.replace(/^\[Instagram postga komment\]\s*/, ''))}</div></div>`;
+    }
+    const dir = m.sender === 'client' ? 'in' : 'out';
+    const next = state.messages[i + 1];
+    const grouped = next && next.sender === m.sender && next.kind !== 'comment' && dayLabel(next.createdAt) === dl && (new Date(next.createdAt) - new Date(m.createdAt)) < 5 * 60000;
+    const by = m.sender === 'ai' ? `${icon('sparkle', 'sm')}AI · ${hm(m.createdAt)}` : m.sender === 'temur' ? `Siz · ${hm(m.createdAt)}` : hm(m.createdAt);
+    prev = m;
+    return out + `<div class="msg ${dir} ${m.sender === 'temur' ? 'coach' : ''} ${grouped ? 'grouped' : ''}"><div class="bubble">${esc(m.text)}</div><div class="by">${by}</div></div>`;
+  }).join('');
+  return `<section class="chat">
+    <div class="chat-head">
+      <button class="iconbtn back" data-go="#/direct" aria-label="Orqaga">${icon('back')}</button>
+      ${avatar(name, 'sm')}
+      <div class="who"><b>${esc(l.displayName && l.username && l.displayName !== l.username ? l.displayName : name)}</b>${l.username ? `<a href="https://instagram.com/${encodeURIComponent(l.username)}" target="_blank" rel="noopener">@${esc(l.username)}</a>` : ''}</div>
+      <button class="aitoggle" id="ai-toggle" title="AI shu mijoz bilan yozishsinmi"><span>AI</span><i class="switch ${ai ? 'on' : ''}"></i></button>
+      <button class="iconbtn" id="info-toggle" title="Ma'lumot">${icon('info')}</button>
+      <button class="iconbtn" id="chat-menu" title="Yana">${icon('more')}</button>
+    </div>
+    ${paused && ai ? `<p class="banner">${icon('pause', 'sm')}Siz yozganingiz uchun AI ${hm(l.aiPausedUntil)} gacha jim turadi</p>` : ''}
+    ${!ai ? `<p class="banner">${icon('info', 'sm')}AI o'chiq — bu suhbatni o'zingiz olib boryapsiz</p>` : ''}
+    <div class="msgs">${bubbles || '<div class="empty">Xabarlar yo\'q</div>'}</div>
+    <form class="compose" id="compose">
+      <textarea id="compose-text" rows="1" placeholder="Xabar yozing…" maxlength="1000"></textarea>
+      <button class="send" type="submit" aria-label="Yuborish">${icon('send')}</button>
+    </form>
+  </section>
+  ${state.hideInfo ? '' : `<aside class="info">${viewInfo(l)}</aside>`}`;
+}
+
+function viewInfo(l) {
+  const a = l.answers || {};
+  const kv = (k, v) => `<div><span>${k}</span><b>${v === undefined || v === null || v === '' ? '—' : esc(v)}</b></div>`;
+  return `<h3>Holat</h3>
+    <div class="field"><select class="select" id="status-select">${Object.entries(STATUS).map(([k, [t]]) => `<option value="${k}" ${l.status === k ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
+    <h3>Anketa</h3>
+    <div class="kv">
+      ${kv("Bo'y", a.height ? a.height + ' sm' : '')}${kv('Vazn', a.weight ? a.weight + ' kg' : '')}
+      ${kv('Yosh', a.age)}${kv('TMI', l.bmi)}
+      ${kv('Maqsad', a.goal ? a.goal + (a.targetWeight ? ` (${a.targetWeight} kg)` : '') : '')}${kv('Davlat', a.country)}
+      ${kv('Trenirovka', a.trainingDays ? `${a.trainingDays} kun · ${a.trainingLocation || ''}` : a.trainingLocation)}${kv('Tajriba', a.trainingExperience)}
+      <div class="wide"><span>Oldingi urinish</span><b>${esc(a.previousAttempts || '—')}</b></div>
+      <div class="wide"><span>Sog'liq</span><b>${esc(a.healthProblems || '—')}</b></div>
+    </div>
+    <h3>Manba</h3>
+    <div class="kv">
+      ${kv('Qayerdan', l.source === 'instagram_comment' ? 'Komment' : l.source === 'instagram' ? 'Direct' : l.source)}${kv('Birinchi xabar', l.createdAt ? `${dayLabel(l.createdAt)}, ${hm(l.createdAt)}` : '')}
+      ${l.igCommentText ? `<div class="wide"><span>Komment</span><b>${esc(l.igCommentText)}</b></div>` : ''}
+    </div>
+    <h3>Eslatma</h3>
+    <textarea class="textarea" id="notes" placeholder="Faqat siz ko'rasiz">${esc(l.notes || '')}</textarea>
+    <h3>Amallar</h3>
+    <div class="actions">
+      <button class="btn ghost" data-act="paid">${icon('check', 'sm')}To'ladi deb belgilash</button>
+      <button class="btn ghost" data-act="reset">${icon('refresh', 'sm')}Suhbatni boshidan boshlash</button>
+      <button class="btn ghost danger" data-act="delete">${icon('trash', 'sm')}O'chirish</button>
+    </div>`;
+}
+
+function autosize(t) { t.style.height = 'auto'; t.style.height = Math.min(140, t.scrollHeight) + 'px'; }
+
+async function loadConvs() {
+  const qs = new URLSearchParams({ filter: state.filter, q: state.q });
+  state.convs = await api('/ig/conversations?' + qs);
+  state.loaded = true;
+}
+async function loadLead() {
+  if (!state.leadId) return;
+  const d = await api('/leads/' + state.leadId);
+  state.lead = d.lead;
+  state.messages = d.messages;
+}
+async function refreshDirect() {
+  await Promise.all([loadConvs(), loadLead()]);
+  render();
+}
+
+// ── comments ──
+const CFILTERS = [['', 'Hammasi'], ['done', 'Javob berildi'], ['pending', 'Kutilmoqda'], ['skipped', "O'tkazildi"], ['failed', 'Xato']];
+const CSTATUS = { done: ['Javob berildi', 'good'], pending: ['Kutilmoqda', 'blue'], skipped: ["O'tkazildi", ''], failed: ['Xato', 'bad'] };
+function viewComments() {
+  const list = state.comments.length
+    ? state.comments.map((c) => {
+        const [st, tone] = CSTATUS[c.status] || [c.status, ''];
+        return `<article class="card cmt" data-id="${c.id}">
+          ${avatar(c.fromUsername, 'sm')}
+          <div class="body">
+            <div class="line1"><b>${esc(c.fromUsername ? '@' + c.fromUsername : 'Foydalanuvchi')}</b><span class="muted small">${esc(timeShort(c.createdAt))}</span><span class="pill ${tone}">${st}</span>${c.ruleName ? `<span class="pill">${icon('zap', 'sm')}${esc(c.ruleName)}</span>` : ''}${c.hidden ? '<span class="pill">Yashirilgan</span>' : ''}</div>
+            <div class="text">${esc(c.text) || '<span class="muted">(matnsiz)</span>'}</div>
+            ${c.error ? `<div class="err">${esc(c.error)}</div>` : ''}
+            ${c.skipReason ? `<div class="muted small" style="margin-bottom:8px">${esc(c.skipReason)}</div>` : ''}
+            ${c.publicReply || c.dmSent ? `<div class="trail">${c.publicReply ? `<div>${icon('reply', 'sm')}${esc(c.publicReply)}</div>` : ''}${c.dmSent ? `<div>${icon('direct', 'sm')}Direct: ${esc(c.dmText || '')}</div>` : ''}</div>` : ''}
+            <div class="acts">
+              <button class="btn sm" data-c="reply">${icon('reply', 'sm')}Javob</button>
+              ${!c.dmSent ? `<button class="btn sm" data-c="dm">${icon('direct', 'sm')}Direct</button>` : ''}
+              ${c.leadId ? `<button class="btn sm" data-go="#/direct/${c.leadId}">${icon('comment', 'sm')}Suhbat</button>` : ''}
+              ${c.status === 'skipped' || c.status === 'failed' ? `<button class="btn sm" data-c="retry">${icon('refresh', 'sm')}Avtomatni ishlatish</button>` : ''}
+              <button class="btn sm ghost" data-c="hide">${icon(c.hidden ? 'eye' : 'eye-off', 'sm')}${c.hidden ? "Ko'rsatish" : 'Yashirish'}</button>
+            </div>
+            <div class="inline-slot"></div>
+          </div>
+        </article>`;
+      }).join('')
+    : `<div class="empty">${icon('comment')}${state.loaded ? "Hali kommentlar yo'q. Webhook ulangach shu yerda ko'rinadi." : 'Yuklanmoqda…'}</div>`;
+  return `<div class="page"><div class="wrap">
+    <div class="head"><div class="grow"><h1>Kommentlar</h1><p>Har bir kommentga bot nima qilganini ko'rasiz</p></div></div>
+    <div class="chips" style="margin-bottom:16px">${CFILTERS.map(([k, t]) => `<button class="chip ${state.commentFilter === k ? 'on' : ''}" data-cfilter="${k}">${t}</button>`).join('')}</div>
+    <div class="feed">${list}</div>
+  </div></div>`;
+}
+async function loadComments() {
+  state.comments = await api('/ig/comments?status=' + state.commentFilter);
+  state.loaded = true;
+}
+
+// ── automations ──
+function viewAutomations() {
+  const cards = state.rules.map((r) => {
+    const kws = String(r.keywords || '').split(/[\n,;]+/).map((s) => s.trim()).filter(Boolean);
+    return `<div class="card rule" data-rule="${r.id}" role="button" tabindex="0">
+      <div class="r1"><b>${esc(r.name || 'Avtomat')}</b><i class="switch ${r.enabled ? 'on' : ''}" data-toggle-rule="${r.id}" role="switch" aria-checked="${r.enabled}"></i></div>
+      <div class="scope">${r.mediaId ? `<div class="thumb" style="background-image:url('${esc(r.mediaThumb || '')}')"></div><span>${esc((r.mediaCaption || 'Tanlangan post').slice(0, 70))}</span>` : `<div class="allposts">${icon('grid', 'sm')}</div><span>Barcha postlar va reelslar</span>`}</div>
+      <div class="kw">${kws.length ? kws.map((k) => `<span class="pill">${esc(k)}</span>`).join('') : '<span class="muted small">Har qanday komment</span>'}</div>
+      <div class="rstats"><span><b>${r.triggered || 0}</b> komment</span><span><b>${r.dmsSent || 0}</b> Direct</span></div>
+    </div>`;
+  }).join('');
+  return `<div class="page"><div class="wrap">
+    <div class="head"><div class="grow"><h1>Avtomatlar</h1><p>Kommentga javob va Direct'dagi birinchi xabar. Keyin suhbatni AI davom ettiradi.</p></div>
+      <button class="btn primary" id="new-rule">${icon('plus', 'sm')}Yangi avtomat</button></div>
+    <div class="rules">${cards || `<div class="empty">${icon('zap')}Yuklanmoqda…</div>`}</div>
+  </div></div>`;
+}
+async function loadRules() { state.rules = await api('/ig/rules'); }
+
+let media = null;
+async function openRuleEditor(rule) {
+  const r = rule ? { ...rule } : { name: '', mediaId: null, keywords: '', publicReplies: ['Direktga yozdim 👍'], dmText: '', enabled: true };
+  let kws = String(r.keywords || '').split(/[\n,;]+/).map((s) => s.trim()).filter(Boolean);
+  let replies = (r.publicReplies || []).slice();
+  const wrap = document.createElement('div');
+  wrap.className = 'scrim';
+  const draw = () => {
+    wrap.innerHTML = `<div class="sheet" role="dialog">
+      <div class="sheet-head"><h2>${rule ? 'Avtomatni tahrirlash' : 'Yangi avtomat'}</h2><button class="iconbtn" data-x>${icon('x')}</button></div>
+      <div class="sheet-body">
+        <div class="field"><label class="label">Nomi</label><input class="input" id="r-name" value="${esc(r.name)}" placeholder="Masalan: Marafon posti"></div>
+        <div class="field"><label class="label">Qaysi post</label>
+          <div class="media-grid" id="r-media">
+            <button class="all ${!r.mediaId ? 'on' : ''}" data-m="">Barcha postlar</button>
+            ${media === null ? '<div class="skeleton" style="aspect-ratio:1"></div><div class="skeleton" style="aspect-ratio:1"></div><div class="skeleton" style="aspect-ratio:1"></div>' : media.error ? `<div class="muted small" style="grid-column:span 3;align-self:center">Postlarni yuklab bo'lmadi: ${esc(media.error)}</div>` : media.map((m) => `<button class="${r.mediaId === m.id ? 'on' : ''}" data-m="${esc(m.id)}" title="${esc((m.caption || '').slice(0, 80))}" style="background-image:url('${esc(m.thumbnail_url || m.media_url || '')}')"></button>`).join('')}
+          </div></div>
+        <div class="field"><label class="label">Kalit so'zlar</label>
+          <div class="tagsinput" id="r-kw">${kws.map((k, i) => `<span class="pill">${esc(k)}<button data-kw="${i}" aria-label="O'chirish">${icon('x', 'sm')}</button></span>`).join('')}<input id="r-kw-input" placeholder="${kws.length ? '' : "Bo'sh — har qanday kommentga"}"></div>
+          <div class="hint">Enter yoki vergul bilan qo'shing. Masalan: <b>+</b>, <b>kurs</b>, <b>narx</b></div></div>
+        <div class="field"><label class="label">Kommentga ochiq javob</label>
+          <div class="replies">${replies.map((t, i) => `<div class="r"><input class="input" data-rep="${i}" value="${esc(t)}" placeholder="Direktga yozdim 👍"><button class="iconbtn" data-rdel="${i}">${icon('x', 'sm')}</button></div>`).join('')}</div>
+          <button class="btn sm ghost" id="r-add" style="margin-top:6px">${icon('plus', 'sm')}Variant qo'shish</button>
+          <div class="hint">Har safar bittasi tasodifiy tanlanadi, shunda javoblar bir xil bo'lib qolmaydi. <b>{username}</b> — kommentchi nomi.</div></div>
+        <div class="field"><label class="label">Direct'ga birinchi xabar</label>
+          <textarea class="textarea" id="r-dm" maxlength="1000" placeholder="Assalomu alaykum! Kommentingizni ko'rdim…">${esc(r.dmText || '')}</textarea>
+          <div class="hint">Instagram kommentga faqat <b>bitta</b> xabar yuborishga ruxsat beradi. Mijoz javob yozgach, suhbatni AI odamdek davom ettiradi. Bo'sh qoldirilsa, Direct yuborilmaydi.</div></div>
+        <div class="field"><label class="label">Ko'rinishi</label>
+          <div class="dm-preview"><div class="bubble in">${esc(kws[0] || 'Kurs narxi qancha?')}</div><div class="bubble" id="r-prev">${esc(r.dmText || '…')}</div></div></div>
+      </div>
+      <div class="sheet-foot">${rule ? `<button class="btn ghost danger" id="r-del">${icon('trash', 'sm')}O'chirish</button>` : ''}<span class="grow"></span><button class="btn" data-x>Bekor</button><button class="btn primary" id="r-save">Saqlash</button></div>
+    </div>`;
+  };
+  const collect = () => {
+    r.name = $('#r-name', wrap).value;
+    r.dmText = $('#r-dm', wrap).value;
+    replies = [...wrap.querySelectorAll('[data-rep]')].map((i) => i.value);
+    const pending = $('#r-kw-input', wrap).value.trim();
+    if (pending) kws.push(...pending.split(',').map((s) => s.trim()).filter(Boolean));
+  };
+  draw();
+  document.body.appendChild(wrap);
+  if (media === null) api('/ig/media').then((m) => { media = m; }).catch((e) => { media = { error: e.message }; }).finally(() => { collect(); draw(); });
+  wrap.addEventListener('click', async (e) => {
+    const t = e.target;
+    if (t === wrap || t.closest('[data-x]')) return wrap.remove();
+    const m = t.closest('[data-m]');
+    if (m) {
+      collect();
+      r.mediaId = m.dataset.m || null;
+      const it = media && !media.error ? media.find((x) => x.id === r.mediaId) : null;
+      r.mediaThumb = it ? it.thumbnail_url || it.media_url || '' : '';
+      r.mediaCaption = it ? it.caption || '' : '';
+      r.mediaPermalink = it ? it.permalink || '' : '';
+      return draw();
+    }
+    const kd = t.closest('[data-kw]');
+    if (kd) { collect(); kws.splice(Number(kd.dataset.kw), 1); return draw(); }
+    if (t.closest('#r-add')) { collect(); replies.push(''); draw(); const ins = wrap.querySelectorAll('[data-rep]'); ins[ins.length - 1].focus(); return; }
+    const rd = t.closest('[data-rdel]');
+    if (rd) { collect(); replies.splice(Number(rd.dataset.rdel), 1); return draw(); }
+    if (t.closest('#r-del')) {
+      if (!(await confirmBox("Avtomatni o'chirasizmi?", "Bu avtomat boshqa kommentlarga javob bermaydi.", "O'chirish", true))) return;
+      await api('/ig/rules/' + rule.id, { method: 'DELETE' });
+      wrap.remove(); toast("O'chirildi"); await loadRules(); render();
+      return;
+    }
+    if (t.closest('#r-save')) {
+      collect();
+      const body = { name: r.name || 'Avtomat', mediaId: r.mediaId || null, mediaThumb: r.mediaThumb || '', mediaCaption: r.mediaCaption || '', mediaPermalink: r.mediaPermalink || '', keywords: kws.join(', '), publicReplies: replies.filter((x) => x.trim()), dmText: r.dmText, enabled: r.enabled !== false };
+      try {
+        if (rule) await api('/ig/rules/' + rule.id, { method: 'PATCH', body });
+        else await api('/ig/rules', { method: 'POST', body });
+        wrap.remove(); toast('Saqlandi'); await loadRules(); render();
+      } catch (err) { toast(err.message); }
+    }
+  });
+  wrap.addEventListener('keydown', (e) => {
+    if (e.target.id === 'r-kw-input' && (e.key === 'Enter' || e.key === ',')) {
+      e.preventDefault();
+      const v = e.target.value.trim();
+      if (v) { collect(); kws = [...new Set(kws)]; e.target.value = ''; draw(); $('#r-kw-input', wrap).focus(); }
+    }
+    if (e.key === 'Escape') wrap.remove();
+  });
+  wrap.addEventListener('input', (e) => { if (e.target.id === 'r-dm') $('#r-prev', wrap).textContent = e.target.value || '…'; });
+}
+
+// ── stats ──
+const METRICS = [['comments', 'Kommentlar'], ['dms', 'Direct'], ['leads', 'Yangi mijozlar']];
+function viewStats() {
+  const o = state.overview;
+  if (!o) return `<div class="page"><div class="wrap"><div class="head"><h1>Statistika</h1></div><div class="kpis">${'<div class="card kpi skeleton" style="height:84px"></div>'.repeat(4)}</div></div></div>`;
+  const kpi = (t, v) => `<div class="card kpi"><span>${t}</span><b>${v}</b></div>`;
+  const first = o.funnel[0] ? o.funnel[0].value : 0;
+  const funnel = o.funnel.map((f, i) => {
+    const pct = first ? Math.round((f.value / first) * 100) : 0;
+    return `<div class="fstep"><div class="fl"><span>${esc(f.label)}</span><b>${f.value}${i ? `<i>${pct}%</i>` : ''}</b></div><div class="fbar"><div style="width:${first ? Math.max(f.value ? 2 : 0, (f.value / first) * 100) : 0}%"></div></div></div>`;
+  }).join('');
+  const rows = o.series.map((d) => `<tr><td>${esc(d.day.slice(5).split('-').reverse().join('.'))}</td><td>${d.comments}</td><td>${d.dms}</td><td>${d.leads}</td></tr>`).join('');
+  return `<div class="page"><div class="wrap">
+    <div class="head"><div class="grow"><h1>Statistika</h1><p>Instagram: kommentlar, Direct va sotuv</p></div></div>
+    <div class="kpis">
+      ${kpi('Bugun kommentlar', o.today.comments)}${kpi("Bugun Direct", o.today.dms)}${kpi('Bugun yangi mijoz', o.today.leads)}
+      ${kpi('AI yozishyapti', o.active)}${kpi('Javob kutyapti', o.waiting)}${kpi('Sotildi · 30 kun', o.sold30)}
+    </div>
+    <div class="grid2">
+      <div class="card pad">
+        <div class="ch"><h2>So'nggi 14 kun</h2><span class="grow"></span>
+          <button class="btn sm ghost" id="table-toggle">${state.showTable ? 'Grafik' : 'Jadval'}</button>
+          <div class="seg">${METRICS.map(([k, t]) => `<button class="${state.metric === k ? 'on' : ''}" data-metric="${k}">${t}</button>`).join('')}</div></div>
+        ${state.showTable
+          ? `<table class="table"><thead><tr><th>Kun</th><th>Komment</th><th>Direct</th><th>Mijoz</th></tr></thead><tbody>${rows}</tbody></table>`
+          : `<div class="chartbox" id="chart"><div class="tip" id="tip"></div></div>`}
+      </div>
+      <div class="card pad"><div class="ch"><h2>Voronka · kommentdan sotuvgacha</h2></div><div class="funnel">${funnel}</div>
+        <p class="hint" style="margin-top:16px">Kommentlar so'nggi 14 kun, qolgani shu kommentlardan kelgan mijozlar (30 kun).</p></div>
+    </div>
+  </div></div>`;
+}
+function drawChart() {
+  const box = $('#chart');
+  if (!box || !state.overview) return;
+  const data = state.overview.series.map((d) => ({ day: d.day, v: d[state.metric] }));
+  const W = box.clientWidth, H = box.clientHeight, padL = 28, padB = 24, padT = 8;
+  const max = Math.max(1, ...data.map((d) => d.v));
+  const step = max <= 4 ? 1 : max <= 10 ? 2 : Math.ceil(max / 4 / 5) * 5;
+  const top = Math.ceil(max / step) * step;
+  const y = (v) => padT + (H - padT - padB) * (1 - v / top);
+  const slot = (W - padL) / data.length;
+  const bw = Math.min(24, slot * 0.56);
+  let g = '';
+  for (let v = 0; v <= top; v += step) g += `<line class="grid" x1="${padL}" x2="${W}" y1="${y(v)}" y2="${y(v)}"/><text class="axis" x="${padL - 8}" y="${y(v) + 4}" text-anchor="end">${v}</text>`;
+  const bars = data.map((d, i) => {
+    const x = padL + slot * i + (slot - bw) / 2;
+    const h = y(0) - y(d.v);
+    const r = Math.min(4, h);
+    const path = d.v ? `M${x},${y(0)} V${y(d.v) + r} Q${x},${y(d.v)} ${x + r},${y(d.v)} H${x + bw - r} Q${x + bw},${y(d.v)} ${x + bw},${y(d.v) + r} V${y(0)} Z` : '';
+    const lab = i % 2 === (data.length - 1) % 2 ? `<text class="axis" x="${x + bw / 2}" y="${H - 6}" text-anchor="middle">${Number(d.day.slice(8))}</text>` : '';
+    return `${path ? `<path class="bar" data-b="${i}" d="${path}"/>` : ''}${lab}<rect class="hit" data-h="${i}" x="${padL + slot * i}" y="${padT}" width="${slot}" height="${H - padT - padB}"/>`;
+  }).join('');
+  const svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="So'nggi 14 kun">${g}${bars}</svg>`;
+  box.querySelectorAll('svg').forEach((s) => s.remove());
+  box.insertAdjacentHTML('afterbegin', svg);
+  const tip = $('#tip');
+  const label = METRICS.find((m) => m[0] === state.metric)[1];
+  box.querySelectorAll('.hit').forEach((h) => {
+    h.addEventListener('pointerenter', () => {
+      const i = Number(h.dataset.h), d = data[i];
+      box.querySelectorAll('.bar').forEach((b) => b.classList.toggle('dim', b.dataset.b !== String(i)));
+      tip.innerHTML = `${esc(d.day.slice(8))}.${esc(d.day.slice(5, 7))} · <b>${d.v}</b> ${esc(label.toLowerCase())}`;
+      tip.style.left = `${padL + slot * i + slot / 2}px`;
+      tip.style.top = `${y(d.v) - 8}px`;
+      tip.style.opacity = 1;
+    });
+    h.addEventListener('pointerleave', () => { tip.style.opacity = 0; box.querySelectorAll('.bar').forEach((b) => b.classList.remove('dim')); });
+  });
+}
+window.addEventListener('resize', () => { if (state.view === 'stats') drawChart(); });
+
+// ── settings ──
+function viewSettings() {
+  const s = state.status, v = state.settings;
+  if (!s || !v) return `<div class="page"><div class="wrap"><div class="head"><h1>Sozlamalar</h1></div><div class="card pad skeleton" style="height:140px"></div></div></div>`;
+  const sw = (key) => `<i class="switch ${v[key] === true || v[key] === 'true' ? 'on' : ''}" data-set="${key}" role="switch"></i>`;
+  const sales = v.ig_sales_mode === true || v.ig_sales_mode === 'true';
+  return `<div class="page"><div class="wrap">
+    <div class="head"><div class="grow"><h1>Sozlamalar</h1><p>Instagram akkaunt va botning xulqi</p></div></div>
+    <div class="settings">
+      <section class="card pad">
+        <div class="acc">
+          <div class="ring">${s.pictureUrl ? `<img src="${esc(s.pictureUrl)}" alt="">` : `<div>${icon('user')}</div>`}</div>
+          <div style="flex:1;min-width:0"><b>${s.username ? '@' + esc(s.username) : 'Akkaunt ulanmagan'}</b>
+            <div class="small muted"><span class="dot ${s.connected ? 'good' : 'bad'}" style="display:inline-block;margin-right:6px"></span>${s.connected ? `Ulangan · token ${s.tokenExpiresAt ? new Date(s.tokenExpiresAt).toLocaleDateString('uz') + ' gacha (o\'zi yangilanadi)' : ''}` : 'Access token kiriting'}</div>
+            <div class="small muted">Oxirgi webhook: ${esc(ago(s.lastWebhookAt))}${s.hasAppSecret ? '' : ' · <b style="color:var(--bad)">App Secret kiritilmagan</b>'}</div>
+            ${s.lastError ? `<div class="err" style="margin:4px 0 0">${esc(s.lastError)}</div>` : ''}
+          </div>
+          <button class="btn" id="connect-open">${s.connected ? 'Almashtirish' : 'Ulash'}</button>
+        </div>
+      </section>
+
+      <section class="card pad">
+        <div class="ch"><h2>Bot xulqi</h2></div>
+        <div class="setrow"><div class="t"><b>AI Direct'ga javob bersin</b><span>O'chirsangiz, Direct'ga faqat o'zingiz yozasiz</span></div>${sw('ig_enabled')}</div>
+        <div class="setrow"><div class="t"><b>Suhbat qayergacha boradi</b><span>${sales ? "Anketa, keyin kursni to'lovgacha sotadi" : "5 ta savol beradi va suhbatni sizga topshiradi"}</span></div>
+          <div class="seg"><button class="${sales ? 'on' : ''}" data-sales="1">Sotuvgacha</button><button class="${!sales ? 'on' : ''}" data-sales="0">5 savol</button></div></div>
+        <div class="setrow"><div class="t"><b>Kommentlarga avtomatik javob</b><span>Avtomatlar bo'limidagi qoidalar bo'yicha</span></div>${sw('ig_comment_enabled')}</div>
+        <div class="setrow"><div class="t"><b>Javob kechikishi</b><span>Odamdek, darhol emas (soniya)</span></div><input class="input" type="number" min="0" max="600" data-num="ig_comment_delay_seconds" value="${esc(v.ig_comment_delay_seconds)}"></div>
+        <div class="setrow"><div class="t"><b>Bir odamga qayta Direct</b><span>Shu vaqt ichida yana komment yozsa, Direct yuborilmaydi (soat)</span></div><input class="input" type="number" min="0" max="720" data-num="ig_comment_dm_cooldown_hours" value="${esc(v.ig_comment_dm_cooldown_hours)}"></div>
+        <p class="hint" style="margin-top:14px">Prompt, narxlar, karta va savollar Telegram bilan umumiy. Ularni Telegram'dagi mini ilovada (/app) o'zgartirasiz.</p>
+      </section>
+
+      <section class="card pad">
+        <div class="ch"><h2>Webhook</h2></div>
+        <label class="label">Callback URL</label>
+        <div class="copy field"><input class="input" readonly value="${esc(s.webhookUrl)}"><button class="btn" data-copy="${esc(s.webhookUrl)}">${icon('copy', 'sm')}</button></div>
+        <label class="label">Verify token</label>
+        <div class="copy field"><input class="input" readonly value="${esc(s.verifyToken)}"><button class="btn" data-copy="${esc(s.verifyToken)}">${icon('copy', 'sm')}</button></div>
+        <ol class="steps small">
+          <li>developers.facebook.com → ilovangiz → Instagram → <b>API setup with Instagram login</b></li>
+          <li>«Configure webhooks»: yuqoridagi URL va tokenni kiriting, so'ng <b>Verify and save</b></li>
+          <li><b>messages</b> va <b>comments</b> maydonlariga obuna bo'ling</li>
+          <li>Akkauntingiz uchun <b>Generate token</b> → tokenni «Ulash» oynasiga qo'ying</li>
+          <li>App settings → Basic dagi <b>App Secret</b> ni ham kiriting</li>
+        </ol>
+      </section>
+      ${s.connected ? `<button class="btn ghost danger" id="disconnect" style="align-self:flex-start">Akkauntni uzish</button>` : ''}
+    </div>
+  </div></div>`;
+}
+function openConnect() {
+  const w = document.createElement('div');
+  w.className = 'scrim';
+  w.innerHTML = `<div class="sheet"><div class="sheet-head"><h2>Instagram'ni ulash</h2><button class="iconbtn" data-x>${icon('x')}</button></div>
+    <div class="sheet-body">
+      <div class="field"><label class="label">Access token</label><textarea class="textarea" id="c-token" placeholder="IGAA…" style="font-family:ui-monospace,Menlo,monospace;font-size:12.5px"></textarea>
+        <div class="hint">Meta → Instagram → API setup → Generate token. Token 60 kun amal qiladi, bot uni o'zi yangilab turadi.</div></div>
+      <div class="field"><label class="label">App Secret</label><input class="input" id="c-secret" type="password" placeholder="${state.status && state.status.hasAppSecret ? "Kiritilgan — o'zgartirish uchun yangisini yozing" : 'App settings → Basic → App secret'}">
+        <div class="hint">Webhook xabarlari haqiqatan Instagram'dan kelganini tekshirish uchun kerak.</div></div>
+    </div>
+    <div class="sheet-foot"><span class="grow"></span><button class="btn" data-x>Bekor</button><button class="btn primary" id="c-save">Ulash</button></div></div>`;
+  document.body.appendChild(w);
+  w.addEventListener('click', async (e) => {
+    if (e.target === w || e.target.closest('[data-x]')) return w.remove();
+    if (e.target.closest('#c-save')) {
+      const btn = $('#c-save', w);
+      btn.disabled = true; btn.textContent = 'Tekshirilmoqda…';
+      try {
+        const r = await api('/ig/connect', { method: 'POST', body: { token: $('#c-token', w).value.trim(), appSecret: $('#c-secret', w).value.trim() } });
+        w.remove();
+        toast(r.username ? `@${r.username} ulandi` : 'Saqlandi');
+        await loadStatus(); render();
+      } catch (err) { toast(err.message); btn.disabled = false; btn.textContent = 'Ulash'; }
+    }
+  });
+}
+async function loadStatus() { state.status = await api('/ig/status'); }
+async function loadSettings() { state.settings = (await api('/settings')).values; }
+async function saveSetting(values) {
+  try { state.settings = (await api('/settings', { method: 'PUT', body: { values } })).values; toast('Saqlandi'); }
+  catch (err) { toast(err.message); }
+  render();
+}
+
+// ── events ──
+let searchTimer;
+root.addEventListener('click', async (e) => {
+  const t = e.target;
+  const goEl = t.closest('[data-go]');
+  if (goEl) { e.preventDefault(); return go(goEl.dataset.go); }
+
+  const f = t.closest('[data-filter]');
+  if (f) { state.filter = f.dataset.filter; render(); return loadConvs().then(render).catch(handleErr); }
+  const cf = t.closest('[data-cfilter]');
+  if (cf) { state.commentFilter = cf.dataset.cfilter; render(); return loadComments().then(render).catch(handleErr); }
+
+  if (t.closest('#ai-toggle')) {
+    const on = state.lead.mode !== 'AI';
+    state.lead.mode = on ? 'AI' : 'MANUAL'; render();
+    try { await api(`/leads/${state.leadId}/mode`, { method: 'POST', body: { mode: on ? 'AI' : 'MANUAL' } }); toast(on ? 'AI yoqildi' : "AI o'chirildi — o'zingiz yozasiz"); }
+    catch (err) { toast(err.message); }
+    return refreshDirect().catch(handleErr);
+  }
+  if (t.closest('#info-toggle')) {
+    if (window.matchMedia('(max-width: 1240px)').matches) return openInfoSheet();
+    state.hideInfo = !state.hideInfo; return render();
+  }
+  if (t.closest('#chat-menu')) {
+    return menu(t.closest('#chat-menu'), [
+      { icon: 'info', text: "Mijoz ma'lumotlari", run: openInfoSheet },
+      ...(state.lead.username ? [{ icon: 'link', text: "Instagram'da ochish", run: () => window.open('https://instagram.com/' + encodeURIComponent(state.lead.username), '_blank') }] : []),
+      { icon: 'check', text: "To'ladi deb belgilash", run: () => leadAct('paid') },
+      { icon: 'refresh', text: 'Boshidan boshlash', run: () => leadAct('reset') },
+      { icon: 'trash', text: "O'chirish", danger: true, run: () => leadAct('delete') },
+    ]);
+  }
+  const act = t.closest('[data-act]');
+  if (act) return leadAct(act.dataset.act);
+
+  // comments
+  const cBtn = t.closest('[data-c]');
+  if (cBtn) {
+    const card = cBtn.closest('[data-id]');
+    const c = state.comments.find((x) => x.id === card.dataset.id);
+    const kind = cBtn.dataset.c;
+    if (kind === 'reply' || kind === 'dm') {
+      const slot = $('.inline-slot', card);
+      slot.innerHTML = `<form class="inline-reply" data-kind="${kind}"><input class="input" placeholder="${kind === 'dm' ? "Direct'ga xabar…" : (c.fromUsername ? '@' + esc(c.fromUsername) + ' ga javob…' : 'Javob…')}" maxlength="1000" required><button class="btn primary">${icon('send', 'sm')}</button></form>`;
+      $('input', slot).focus();
+      return;
+    }
+    try {
+      if (kind === 'hide') { await api(`/ig/comments/${c.id}/hide`, { method: 'POST', body: { hide: !c.hidden } }); toast(c.hidden ? "Ko'rsatildi" : 'Yashirildi'); }
+      if (kind === 'retry') { cBtn.disabled = true; await api(`/ig/comments/${c.id}/retry`, { method: 'POST' }); toast('Bajarildi'); }
+    } catch (err) { toast(err.message); }
+    return loadComments().then(render).catch(handleErr);
+  }
+
+  // automations
+  const tog = t.closest('[data-toggle-rule]');
+  if (tog) {
+    e.stopPropagation();
+    const r = state.rules.find((x) => x.id === tog.dataset.toggleRule);
+    r.enabled = !r.enabled; render();
+    try { await api('/ig/rules/' + r.id, { method: 'PATCH', body: { enabled: r.enabled } }); toast(r.enabled ? 'Yoqildi' : "O'chirildi"); } catch (err) { toast(err.message); }
+    return;
+  }
+  const ruleCard = t.closest('[data-rule]');
+  if (ruleCard) return openRuleEditor(state.rules.find((x) => x.id === ruleCard.dataset.rule));
+  if (t.closest('#new-rule')) return openRuleEditor(null);
+
+  // stats
+  const mt = t.closest('[data-metric]');
+  if (mt) { state.metric = mt.dataset.metric; return render(); }
+  if (t.closest('#table-toggle')) { state.showTable = !state.showTable; return render(); }
+
+  // settings
+  const sw = t.closest('[data-set]');
+  if (sw) { const k = sw.dataset.set; return saveSetting({ [k]: !(state.settings[k] === true || state.settings[k] === 'true') }); }
+  const sm = t.closest('[data-sales]');
+  if (sm) return saveSetting({ ig_sales_mode: sm.dataset.sales === '1' });
+  const cp = t.closest('[data-copy]');
+  if (cp) return copy(cp.dataset.copy);
+  if (t.closest('#connect-open')) return openConnect();
+  if (t.closest('#disconnect')) {
+    if (!(await confirmBox('Akkauntni uzasizmi?', "Bot Instagram'ga yozishni to'xtatadi. Keyin tokenni qayta kiritib ulash mumkin.", 'Uzish', true))) return;
+    await api('/ig/disconnect', { method: 'POST' }).catch((err) => toast(err.message));
+    await loadStatus(); render();
+  }
+});
+
+root.addEventListener('change', (e) => {
+  const n = e.target.closest('[data-num]');
+  if (n) return saveSetting({ [n.dataset.num]: Number(n.value) });
+  if (e.target.id === 'status-select') {
+    api(`/leads/${state.leadId}/status`, { method: 'POST', body: { status: e.target.value } }).then(() => { toast('Holat yangilandi'); return refreshDirect(); }).catch((err) => toast(err.message));
+  }
+});
+
+let notesTimer;
+root.addEventListener('input', (e) => {
+  if (e.target.id === 'search') {
+    state.q = e.target.value;
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => loadConvs().then(render).catch(handleErr), 250);
+  }
+  if (e.target.id === 'compose-text') autosize(e.target);
+  if (e.target.id === 'notes') {
+    const id = state.leadId, val = e.target.value;
+    state.lead.notes = val;
+    clearTimeout(notesTimer);
+    notesTimer = setTimeout(() => api(`/leads/${id}/notes`, { method: 'POST', body: { notes: val } }).catch(() => toast('Eslatma saqlanmadi')), 600);
+  }
+});
+
+root.addEventListener('keydown', (e) => {
+  if (e.target.id === 'compose-text' && e.key === 'Enter' && !e.shiftKey && !e.isComposing && window.matchMedia('(min-width: 961px)').matches) {
+    e.preventDefault();
+    $('#compose').requestSubmit();
+  }
+});
+
+root.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const f = e.target;
+  if (f.id === 'compose') {
+    const ta = $('#compose-text');
+    const text = ta.value.trim();
+    if (!text) return;
+    const btn = $('.send', f);
+    btn.disabled = true;
+    state.messages.push({ sender: 'temur', text, createdAt: new Date().toISOString(), kind: 'text' });
+    ta.value = '';
+    render();
+    try { await api(`/leads/${state.leadId}/message`, { method: 'POST', body: { text } }); }
+    catch (err) { toast(err.message); state.messages.pop(); if ($('#compose-text')) $('#compose-text').value = text; render(); }
+    return refreshDirect().catch(handleErr);
+  }
+  if (f.classList.contains('inline-reply')) {
+    const card = f.closest('[data-id]');
+    const input = $('input', f);
+    const text = input.value.trim();
+    if (!text) return;
+    try {
+      await api(`/ig/comments/${card.dataset.id}/${f.dataset.kind === 'dm' ? 'dm' : 'reply'}`, { method: 'POST', body: { text } });
+      toast(f.dataset.kind === 'dm' ? 'Direct yuborildi' : 'Javob yozildi');
+      await loadComments(); render();
+    } catch (err) { toast(err.message); }
+  }
+});
+
+async function leadAct(kind) {
+  const id = state.leadId;
+  if (kind === 'paid') {
+    await api(`/leads/${id}/status`, { method: 'POST', body: { status: 'PAID' } }).catch((err) => toast(err.message));
+    toast("To'ladi deb belgilandi");
+  } else if (kind === 'reset') {
+    if (!(await confirmBox('Boshidan boshlaysizmi?', "Javoblar va suhbat tarixi o'chadi, AI mijoz bilan yangidan gaplashadi.", 'Boshlash', true))) return;
+    await api(`/leads/${id}/reset`, { method: 'POST' }).catch((err) => toast(err.message));
+    toast('Tozalandi');
+  } else if (kind === 'delete') {
+    if (!(await confirmBox("Mijozni o'chirasizmi?", "Suhbat tarixi butunlay o'chadi. Bu qaytarilmaydi.", "O'chirish", true))) return;
+    await api(`/leads/${id}`, { method: 'DELETE' }).catch((err) => toast(err.message));
+    toast("O'chirildi");
+    return go('#/direct');
+  }
+  document.querySelectorAll('.scrim').forEach((s) => s.remove());
+  await refreshDirect().catch(handleErr);
+}
+
+function openInfoSheet() {
+  const w = document.createElement('div');
+  w.className = 'scrim';
+  w.innerHTML = `<div class="sheet"><div class="sheet-head"><h2>Mijoz</h2><button class="iconbtn" data-x>${icon('x')}</button></div><div class="sheet-body">${viewInfo(state.lead)}</div></div>`;
+  document.body.appendChild(w);
+  w.addEventListener('click', (e) => {
+    if (e.target === w || e.target.closest('[data-x]')) return w.remove();
+    const a = e.target.closest('[data-act]');
+    if (a) leadAct(a.dataset.act);
+  });
+  w.addEventListener('change', (e) => {
+    if (e.target.id === 'status-select') api(`/leads/${state.leadId}/status`, { method: 'POST', body: { status: e.target.value } }).then(() => { toast('Holat yangilandi'); return refreshDirect(); }).catch((err) => toast(err.message));
+  });
+  w.addEventListener('input', (e) => {
+    if (e.target.id !== 'notes') return;
+    const id = state.leadId, val = e.target.value;
+    state.lead.notes = val;
+    clearTimeout(notesTimer);
+    notesTimer = setTimeout(() => api(`/leads/${id}/notes`, { method: 'POST', body: { notes: val } }).catch(() => toast('Eslatma saqlanmadi')), 600);
+  });
+}
+
+// ── loading per view ──
+async function load() {
+  clearTimers();
+  state.loaded = false;
+  try {
+    if (state.view === 'direct') { await refreshDirect(); every(5000, refreshDirect); }
+    else if (state.view === 'comments') { await loadComments(); render(); every(15000, async () => { await loadComments(); if (!document.querySelector('.inline-reply')) render(); }); }
+    else if (state.view === 'automations') { await loadRules(); render(); }
+    else if (state.view === 'stats') { state.overview = await api('/ig/overview'); render(); every(60000, async () => { state.overview = await api('/ig/overview'); render(); }); }
+    else { await Promise.all([loadStatus(), loadSettings()]); render(); }
+  } catch (err) { handleErr(err); }
+}
+
+async function boot() {
+  if (!inTelegram && !memSession) return showLogin();
+  parseRoute();
+  render();
+  try {
+    await Promise.all([loadStatus(), api('/ig/overview').then((o) => { state.overview = o; })]);
+  } catch (err) { if (err instanceof AuthError) return showLogin(); }
+  render();
+  load();
+  setInterval(() => { if (!document.hidden) loadStatus().catch(() => undefined); }, 60000);
+}
+boot();
+})();
+</script>
+</body>
+</html>

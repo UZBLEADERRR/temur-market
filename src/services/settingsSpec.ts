@@ -366,6 +366,24 @@ QOIDALAR
     default:
       "botmisiz, botmisan, bot misiz, botmi bu, bu botmi, ai misiz, aimisiz, sun'iy intellekt, temurning o'zimi, temur o'zi yozyaptimi, temur o'zi yozayaptimi, o'zingiz yozyapsizmi, вы бот, ты бот, это бот, это нейросеть, вы нейросеть, это ии, это темур сам, сами пишете",
   },
+  // ── Instagram ──
+  { key: 'ig_enabled', label: 'Instagram: AI Direct xabarlarga javob bersin', group: 'Instagram', type: 'boolean', default: true },
+  { key: 'ig_sales_mode', label: "Instagram: kursni to'lovgacha sotsin (o'chiq = faqat 5 savol)", group: 'Instagram', type: 'boolean', default: true },
+  { key: 'ig_comment_enabled', label: 'Instagram: kommentlarga avtomatik javob', group: 'Instagram', type: 'boolean', default: true },
+  {
+    key: 'ig_comment_delay_seconds',
+    label: 'Kommentga necha soniyadan keyin javob (odamdek, darhol emas)',
+    group: 'Instagram',
+    type: 'number',
+    default: 25,
+  },
+  {
+    key: 'ig_comment_dm_cooldown_hours',
+    label: "Bitta odamga kommentdan Direct qayta yuborilmasin (soat)",
+    group: 'Instagram',
+    type: 'number',
+    default: 72,
+  },
 ];
 
 export const SETTINGS_BY_KEY = new Map(SETTINGS_SPEC.map((s) => [s.key, s]));

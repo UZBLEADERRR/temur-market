@@ -14,6 +14,8 @@ import { tokenize } from '../style/examples';
 import { LEAD_STATUSES, type LeadStatus } from '../types/domain';
 import { escapeHtml, detectLanguage } from '../utils/text';
 import { validateInitData } from './auth';
+import { verifySession } from './session';
+import { instagramApi } from './igApi';
 import { logger } from '../utils/logger';
 
 type AuthedRequest = Request & { adminId?: number };
@@ -26,7 +28,15 @@ const asyncH =
 export function createWebApp(app: AppContext, extra?: (e: express.Express) => void): express.Express {
   const web = express();
   web.disable('x-powered-by');
-  web.use(express.json({ limit: '2mb' }));
+  // the raw body is kept for webhook signatures (Instagram X-Hub-Signature-256)
+  web.use(
+    express.json({
+      limit: '2mb',
+      verify: (req, _res, buf) => {
+        (req as Request & { rawBody?: Buffer }).rawBody = buf;
+      },
+    }),
+  );
 
   web.get('/health', (_req, res) => {
     res.json({ ok: true, time: new Date().toISOString() });
@@ -35,11 +45,19 @@ export function createWebApp(app: AppContext, extra?: (e: express.Express) => vo
   extra?.(web);
 
   web.use('/app', express.static(path.join(__dirname, 'public'), { index: 'index.html', maxAge: 0 }));
+  web.use('/ig', express.static(path.join(__dirname, 'public', 'ig'), { index: 'index.html', maxAge: 0 }));
 
   const auth = (req: AuthedRequest, res: Response, next: NextFunction) => {
     const token = req.header('x-admin-token');
     if (app.env.ADMIN_WEB_TOKEN && token && safeEqual(token, app.env.ADMIN_WEB_TOKEN)) {
       req.adminId = app.env.adminIds[0];
+      return next();
+    }
+    // signed login link from the bot (Instagram panel in a normal browser)
+    const session = req.header('x-admin-session');
+    const sessionAdmin = session ? verifySession(session, app.env.TELEGRAM_BOT_TOKEN) : null;
+    if (sessionAdmin && app.env.adminIds.includes(sessionAdmin)) {
+      req.adminId = sessionAdmin;
       return next();
     }
     const user = validateInitData(req.header('x-telegram-init-data') ?? '', app.env.TELEGRAM_BOT_TOKEN);
@@ -52,13 +70,15 @@ export function createWebApp(app: AppContext, extra?: (e: express.Express) => vo
   api.use(auth);
 
   api.get('/me', (req: AuthedRequest, res) => {
-    res.json({ adminId: req.adminId, publicUrl: app.env.publicUrl });
+    res.json({ adminId: req.adminId, publicUrl: app.env.publicUrl, instagram: Boolean(app.instagram) });
   });
 
   api.get(
     '/leads',
     asyncH(async (req, res) => {
-      const q: Record<string, unknown> = {};
+      // the Telegram mini app shows Telegram chats; Instagram chats live in the Instagram panel
+      const channel = String(req.query.channel ?? 'telegram');
+      const q: Record<string, unknown> = channel === 'all' ? {} : channel === 'instagram' ? { channel: 'instagram' } : { channel: { $ne: 'instagram' } };
       const status = String(req.query.status ?? '');
       if (status === 'QUEUE') q.status = 'READY';
       else if (LEAD_STATUSES.includes(status as LeadStatus)) q.status = status;
@@ -76,6 +96,7 @@ export function createWebApp(app: AppContext, extra?: (e: express.Express) => vo
           name: displayName(l),
           username: l.username,
           telegramId: l.telegramId,
+          channel: l.channel ?? 'telegram',
           source: l.source,
           status: l.status,
           mode: l.mode,
@@ -173,7 +194,7 @@ export function createWebApp(app: AppContext, extra?: (e: express.Express) => vo
       const lead = await Lead.findById(req.params.id);
       if (!lead) return res.status(404).json({ error: 'not found' });
       try {
-        const sent = await app.gateway.sendBusinessMessage(lead.businessConnectionId, lead.chatId, text.slice(0, 4000));
+        const sent = await app.gateway.sendBusinessMessage(lead.businessConnectionId, lead.chatId, text.slice(0, lead.channel === 'instagram' ? 3000 : 4000));
         await Message.create({
           leadId: lead._id,
           telegramMessageId: sent.messageId,
@@ -187,7 +208,12 @@ export function createWebApp(app: AppContext, extra?: (e: express.Express) => vo
         res.json({ ok: true });
       } catch (err) {
         logger.warn({ err: (err as Error).message }, 'Mini app send failed');
-        res.status(502).json({ error: "Yuborib bo'lmadi (24 soatlik oyna yopilgan yoki bot pauzada). Telegram'da o'zingiz yozing." });
+        res.status(502).json({
+          error:
+            lead.channel === 'instagram'
+              ? "Yuborib bo'lmadi: mijoz oxirgi marta yozganiga 24 soatdan oshgan bo'lishi mumkin. Instagram ilovasida o'zingiz yozing."
+              : "Yuborib bo'lmadi (24 soatlik oyna yopilgan yoki bot pauzada). Telegram'da o'zingiz yozing.",
+        });
       }
     }),
   );
@@ -380,6 +406,7 @@ export function createWebApp(app: AppContext, extra?: (e: express.Express) => vo
     }),
   );
 
+  api.use('/ig', instagramApi(app));
   web.use('/api', api);
 
   web.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {

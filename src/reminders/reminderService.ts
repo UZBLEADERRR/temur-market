@@ -1,3 +1,4 @@
+import { clientLinkHtml } from '../leads/leadCard';
 import { Lead } from '../database/models/Lead';
 import { Reminder } from '../database/models/misc';
 import { Message } from '../database/models/Message';
@@ -44,7 +45,7 @@ export class ReminderService {
       const waited = Math.round((now.getTime() - lead.lastClientMessageAt!.getTime()) / MINUTE);
       await this.gateway
         ?.notifyAdmins(
-          `⏰ Mijoz ${waited} daqiqadan beri javobingizni kutyapti: <a href="tg://user?id=${lead.telegramId}">${(lead.name || lead.firstName || 'mijoz').replace(/[<>&]/g, '')}</a>${lead.username ? ' @' + lead.username : ''}`,
+          `⏰ Mijoz ${waited} daqiqadan beri javobingizni kutyapti: ${clientLinkHtml(lead)}`,
         )
         .catch(() => undefined);
       await Lead.updateOne({ _id: lead._id }, { $set: { coachNudgedAt: now }, $inc: { coachNudges: 1 } });

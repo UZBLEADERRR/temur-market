@@ -116,6 +116,39 @@ Instagram video → chat link → Temurning akkaunti → AI: 5 savol → «Tushu
 
 Asosiy manba — texnik topshiriq (2-versiya) va system prompt v3.2. Prompt matnida murabbiy ismi `{{coach_name}}` (standart qiymati «Temur»).
 
+## Instagram (ManyChat o'rniga)
+
+Instagram Direct ham Telegram'dagi o'sha AI ga ulanadi. Bot Temurning uslubida, odamdek yozadi: o'sha 5 ta savol, sotuv, karta, eslatmalar. Prompt, narx va karta Telegram bilan umumiy.
+
+**Nima qiladi:**
+- **Direct.** Mijoz yozsa, AI javob beradi: "yozyapti…" belgisi, qisqa xabarlar, ovozli xabar va rasmni tushunadi. Temur Instagram ilovasida o'zi yozsa, AI pauzaga o'tadi.
+- **Kommentlar.** Kimdir postga yoki reelsga komment yozsa, bot 15–35 soniyadan keyin (darhol emas) komment ostiga qisqa javob yozadi va Direct'ga bitta xabar yuboradi. Odam javob yozsa, suhbatni AI davom ettiradi.
+- **Avtomatlar.** "Barcha postlar" yoki aniq bir post uchun kalit so'zlar (`+`, `kurs`, `narx`), bir nechta ochiq javob varianti (har safar biri tasodifiy tanlanadi) va Direct matni. Bitta odamga 72 soat ichida Direct qayta yuborilmaydi.
+- **Rejim.** Instagram uchun alohida tanlanadi: "Sotuvgacha" yoki "5 savol". Telegram'ga ta'sir qilmaydi.
+- **Bildirishnomalar.** Lead kartochkalari va ogohlantirishlar Telegram admin chatiga 📸 belgisi bilan keladi.
+
+**Instagram panel** (`/instagram` buyrug'i). Telegram ichida yoki kompyuter brauzerida ochiladi. Brauzer havolasi 30 kun amal qiladi.
+- **Direct:** suhbatlar ro'yxati, filtrlar, chat, har bir mijoz uchun AI ni yoqish/o'chirish, anketa ma'lumotlari, eslatma, holat.
+- **Kommentlar:** har bir kommentga bot nima qilgani ko'rinadi. Qo'lda javob yozish, Direct yuborish, yashirish va avtomatni qayta ishlatish mumkin.
+- **Avtomatlar:** qoidalarni yaratish va tahrirlash, postni rasm bo'yicha tanlash.
+- **Statistika:** bugungi ko'rsatkichlar, 14 kunlik grafik, kommentdan sotuvgacha voronka.
+- **Sozlamalar:** akkauntni ulash, webhook ma'lumotlari, bot xulqi.
+
+**Ulash:**
+1. Instagram akkaunt **Professional** (Business yoki Creator) bo'lishi kerak.
+2. developers.facebook.com → **Create app** → **Instagram** → "API setup with Instagram login".
+3. Panel → Sozlamalar'dagi **Callback URL** va **Verify token** ni "Configure webhooks" ga kiriting. **messages** va **comments** maydonlariga obuna bo'ling.
+4. "Generate token" bosing va tokenni panelga qo'ying. Ruxsatlar: `instagram_business_basic`, `instagram_business_manage_messages`, `instagram_business_manage_comments`.
+5. App settings → Basic'dagi **App Secret** ni ham kiriting. Busiz webhook qabul qilinmaydi.
+6. Ilova Development rejimida faqat Instagram tester akkauntlariga javob beradi. Hammaga ishlashi uchun ilovani Live qiling (Meta App Review).
+
+Muqobil yo'l: tokenni env orqali berish (`IG_ACCESS_TOKEN`, `IG_APP_SECRET`, ixtiyoriy `IG_VERIFY_TOKEN`). Token 60 kun amal qiladi, bot uni har 5 kunda o'zi yangilaydi.
+
+**Instagram cheklovlari:**
+- Bitta kommentga faqat **bitta** Direct yuborish mumkin. Kommentga 7 kun ichida javob berilishi kerak.
+- Mijoz oxirgi marta yozganidan 24 soat o'tgach, bot unga yoza olmaydi. Eslatmalar shu 24 soat ichida yuboriladi.
+- Oldindan yozib qo'yilgan ovozli takliflar hozircha faqat Telegram'ga yuboriladi.
+
 ## Nima qila oladi
 
 | Imkoniyat | Qayerda |

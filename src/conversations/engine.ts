@@ -9,7 +9,8 @@ import { parseAnswers, parseTargetWeight, inRange } from '../leads/answerParser'
 import { bmiBand, calcBmi } from '../leads/bmi';
 import { missingFields, missingHint, nextStep, pickAck, questionText, stripLeadingAck } from '../leads/questionnaire';
 import type { LeadService } from '../leads/leadService';
-import { displayName } from '../leads/leadCard';
+import { clientLinkHtml, displayName } from '../leads/leadCard';
+import { isIgConnection } from '../instagram/igAccount';
 import { detectSource } from '../leads/sourceDetector';
 import type { SettingsService } from '../services/settings';
 import { retrieveExamples } from '../style/examples';
@@ -25,6 +26,8 @@ import { logger } from '../utils/logger';
 
 export interface ClientInfo {
   id: number;
+  /** Instagram-scoped user id (Instagram Direct chats only). */
+  igUserId?: string;
   username?: string;
   first_name?: string;
   last_name?: string;
@@ -51,6 +54,11 @@ export interface EngineOptions {
   now?: () => Date;
   /** Client-facing time zone (follow-up times, quiet hours). */
   timeZone?: string;
+}
+
+/** Lead fields that tell Telegram and Instagram chats apart. */
+function channelFields(connectionId: string, chat: ClientInfo) {
+  return isIgConnection(connectionId) ? { channel: 'instagram' as const, igUserId: chat.igUserId } : { channel: 'telegram' as const };
 }
 
 const ACTIVE_STATUSES: LeadStatus[] = ['NEW', 'QUESTIONNAIRE', 'SALES'];
@@ -94,12 +102,13 @@ export class ConversationEngine {
         businessConnectionId: msg.connectionId,
         chatId: msg.chat.id,
         telegramId: msg.chat.id,
+        ...channelFields(msg.connectionId, msg.chat),
         username: msg.chat.username,
         firstName: msg.chat.first_name,
         lastName: msg.chat.last_name,
         name: [msg.chat.first_name, msg.chat.last_name].filter(Boolean).join(' ') || undefined,
         language: detectLanguage(detected.cleanedText) ?? 'uz',
-        source: detected.source,
+        source: detected.source === 'unknown' && isIgConnection(msg.connectionId) ? 'instagram' : detected.source,
         sourceRaw: text.slice(0, 200),
         status: 'NEW',
         mode: (await this.deps.settings.bool('ai_enabled')) ? 'AI' : 'MANUAL',
@@ -171,6 +180,7 @@ export class ConversationEngine {
         businessConnectionId: input.connectionId,
         chatId: input.chat.id,
         telegramId: input.chat.id,
+        ...channelFields(input.connectionId, input.chat),
         username: input.chat.username,
         firstName: input.chat.first_name,
         lastName: input.chat.last_name,
@@ -280,6 +290,12 @@ export class ConversationEngine {
     const lead = await Lead.findById(leadId);
     if (!lead || !isAiActive(lead)) return;
     if (!(await this.deps.settings.bool('ai_enabled'))) return;
+    if (lead.channel === 'instagram' && !(await this.deps.settings.bool('ig_enabled'))) {
+      // Instagram bot switched off in the panel: the coach answers these chats himself
+      await Message.updateMany({ leadId: lead._id, processed: false }, { $set: { processed: true } });
+      await Lead.updateOne({ _id: lead._id }, { $unset: { pendingSince: '' } });
+      return;
+    }
     // the coach is talking to this client right now — do not interfere; picked up again after the pause
     if (lead.aiPausedUntil && lead.aiPausedUntil.getTime() > this.now().getTime()) return;
 
@@ -304,7 +320,7 @@ export class ConversationEngine {
       await lead.save();
       await AdminEvent.create({ type: 'flood', leadId: lead._id, data: { recentCount } });
       await this.deps.gateway
-        .notifyAdmins(`⚠️ Juda ko'p xabar (${recentCount} ta / 5 daqiqa) — AI shu chatda to'xtadi: <a href="tg://user?id=${lead.telegramId}">${escapeHtml(displayName(lead))}</a>`)
+        .notifyAdmins(`⚠️ Juda ko'p xabar (${recentCount} ta / 5 daqiqa) — AI shu chatda to'xtadi: ${clientLinkHtml(lead)}`)
         .catch(() => undefined);
       return;
     }
@@ -388,7 +404,7 @@ export class ConversationEngine {
     if (
       lead.status === 'QUESTIONNAIRE' &&
       lead.intent !== 'asked' &&
-      (await this.deps.settings.bool('sales_mode')) &&
+      (await this.salesOn(lead)) &&
       containsAny(newText, splitKeywords(await this.deps.settings.get('payment_request_keywords')))
     ) {
       lead.status = 'SALES';
@@ -413,7 +429,7 @@ export class ConversationEngine {
     // 3) First contact: is the client writing about the course at all?
     const gaveBasics = answers.height !== undefined || answers.weight !== undefined || answers.age !== undefined;
     const courseSignal =
-      (lead.source && lead.source !== 'unknown') ||
+      (lead.source && lead.source !== 'unknown' && lead.source !== 'instagram') ||
       gaveBasics ||
       Boolean(containsAny(newText, splitKeywords(await this.deps.settings.get('course_keywords'))));
     if (lead.status === 'NEW') {
@@ -553,7 +569,7 @@ export class ConversationEngine {
 
     const after = nextStep(answers, [...skipped]);
     lead.currentQuestion = after;
-    if (after === 6 && (await this.deps.settings.bool('sales_mode'))) {
+    if (after === 6 && (await this.salesOn(lead))) {
       // questionnaire done → the coach gets the card, the AI moves on to selling the course
       lead.status = 'SALES';
       lead.readyReason = 'completed';
@@ -694,7 +710,7 @@ export class ConversationEngine {
       countryInfo: await this.countryInfo(lead, lang),
       resultsLink: (await s.get('results_link')).trim() || undefined,
       resultsLinkSent: Boolean(lead.resultsLinkSent),
-      voices: (await VoiceClip.find({ enabled: true }).sort({ createdAt: 1 }).limit(30).lean()).filter((v) => clipFits(v.country, clientCountry(lead))).map((v) => ({
+      voices: lead.channel === 'instagram' ? [] : (await VoiceClip.find({ enabled: true }).sort({ createdAt: 1 }).limit(30).lean()).filter((v) => clipFits(v.country, clientCountry(lead))).map((v) => ({
         id: String(v._id).slice(-6),
         title: v.title || 'ovozli xabar',
         summary: (v.description || v.transcript || '').replace(/\s+/g, ' ').slice(0, 220),
@@ -725,7 +741,7 @@ export class ConversationEngine {
       await lead.save();
       await this.deps.gateway
         .notifyAdmins(
-          `⚠️ AI javob bera olmayapti (${lead.aiFailures} marta).\nMijoz: <a href="tg://user?id=${lead.telegramId}">${escapeHtml(displayName(lead))}</a>${lead.username ? ' @' + escapeHtml(lead.username) : ''}\nBot qayta urinadi. Shoshilinch bo'lsa o'zingiz yozing.`,
+          `⚠️ AI javob bera olmayapti (${lead.aiFailures} marta).\nMijoz: ${clientLinkHtml(lead)}\nBot qayta urinadi. Shoshilinch bo'lsa o'zingiz yozing.`,
         )
         .catch(() => undefined);
     }
@@ -762,7 +778,7 @@ export class ConversationEngine {
     logger.info({ leadId: String(lead._id) }, 'Not a course lead — AI stopped');
     await this.deps.gateway
       .notifyAdmins(
-        `💬 Kurs bo'yicha emas (AI to'xtadi): <a href="tg://user?id=${lead.telegramId}">${escapeHtml(displayName(lead))}</a>${lead.username ? ' @' + escapeHtml(lead.username) : ''}\n<i>${escapeHtml(text.slice(0, 300))}</i>`,
+        `💬 Kurs bo'yicha emas (AI to'xtadi): ${clientLinkHtml(lead)}\n<i>${escapeHtml(text.slice(0, 300))}</i>`,
       )
       .catch(() => undefined);
   }
@@ -990,7 +1006,7 @@ export class ConversationEngine {
 
   /** Resolves the model's voice_id (short id) to an enabled clip that this client has not received yet. */
   private async pickVoice(lead: LeadDoc, voiceId?: string | null) {
-    if (!voiceId) return null;
+    if (!voiceId || lead.channel === 'instagram') return null;
     const clips = await VoiceClip.find({ enabled: true }).lean();
     const clip = clips.find((c) => String(c._id).endsWith(voiceId.trim()));
     if (!clip || (lead.sentVoiceIds ?? []).includes(String(clip._id))) return null;
@@ -1024,6 +1040,11 @@ export class ConversationEngine {
     } catch (err) {
       logger.error({ leadId: String(lead._id), err: (err as Error).message }, 'Voice send failed');
     }
+  }
+
+  /** Sales stage on/off: Instagram has its own switch (sotuvgacha / faqat 5 savol). */
+  private async salesOn(lead: LeadDoc): Promise<boolean> {
+    return this.deps.settings.bool(lead.channel === 'instagram' ? 'ig_sales_mode' : 'sales_mode');
   }
 
   private tz(): string {
@@ -1186,9 +1207,11 @@ export class ConversationEngine {
         // never fail silently: the coach must know the client got no answer
         await this.deps.gateway
           .notifyAdmins(
-            `⚠️ Mijozga xabar yuborilmadi: <a href="tg://user?id=${lead.telegramId}">${escapeHtml(displayName(lead))}</a>\n` +
-              `Telegram javobi: <code>${escapeHtml(reason)}</code>\n` +
-              (isChatClosedError(err)
+            `⚠️ Mijozga xabar yuborilmadi: ${clientLinkHtml(lead)}\n` +
+              `${lead.channel === 'instagram' ? 'Instagram' : 'Telegram'} javobi: <code>${escapeHtml(reason)}</code>\n` +
+              (isChatClosedError(err) && lead.channel === 'instagram'
+                ? "Sabab odatda: mijoz oxirgi marta yozganiga <b>24 soatdan oshgan</b> — Instagram bunday paytda yozishga ruxsat bermaydi. Mijoz yana yozsa, AI davom etadi (mini ilovada «AI ni qayta yoqish»)."
+                : isChatClosedError(err)
                 ? "Sabab odatda: bot shu chatda <b>pauzada</b> yoki Telegram Business → Chatbots'da <b>javob berish ruxsati</b> o'chiq. Pauzani olib tashlang, so'ng mini ilovada «🧹 Tozalash» yoki «AI ni qayta yoqish» ni bosing."
                 : 'Bot keyinroq qayta urinadi.'),
           )

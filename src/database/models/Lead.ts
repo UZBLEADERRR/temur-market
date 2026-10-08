@@ -25,7 +25,15 @@ const AnswersSchema = new Schema(
  */
 const LeadSchema = new Schema(
   {
+    /** Telegram: business connection id. Instagram: «ig:<account id>». */
     businessConnectionId: { type: String, required: true },
+    channel: { type: String, enum: ['telegram', 'instagram'], default: 'telegram', index: true },
+    /** Instagram-scoped user id (chatId is a stable number derived from it). */
+    igUserId: { type: String, index: true },
+    /** The comment that started this conversation (Instagram automation). */
+    igCommentId: String,
+    igMediaId: String,
+    igCommentText: String,
     chatId: { type: Number, required: true },
     telegramId: { type: Number, required: true, index: true },
     username: String,

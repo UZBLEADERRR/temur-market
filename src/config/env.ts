@@ -37,6 +37,12 @@ const EnvSchema = z.object({
   WEBHOOK_SECRET: z.string().optional(),
   ADMIN_WEB_TOKEN: z.string().optional(),
   TZ_NAME: z.string().default('Asia/Tashkent'),
+  /** Instagram (optional — can also be connected from the Instagram panel). */
+  IG_ACCESS_TOKEN: z.string().optional(),
+  IG_APP_SECRET: z.string().optional(),
+  IG_VERIFY_TOKEN: z.string().optional(),
+  IG_API_VERSION: z.string().default('v23.0'),
+  IG_GRAPH_BASE: z.string().default('https://graph.instagram.com'),
   LOG_LEVEL: z.string().default('info'),
 });
 

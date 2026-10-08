@@ -14,6 +14,8 @@ import { ConversationEngine } from './conversations/engine';
 import { LeadService } from './leads/leadService';
 import { ReminderService } from './reminders/reminderService';
 import { createWebApp } from './webapp/server';
+import { createInstagram } from './instagram';
+import { registerInstagramWebhook } from './instagram/webhook';
 import type { AppContext } from './services/appContext';
 import { logger } from './utils/logger';
 import { MINUTE } from './utils/time';
@@ -32,11 +34,14 @@ async function main() {
     { maxConcurrency: env.LLM_MAX_CONCURRENCY },
   );
   const bot = createBot(env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_API_ROOT);
-  const gateway = new GrammyGateway(bot, env.adminIds, env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_API_ROOT);
+  const tgGateway = new GrammyGateway(bot, env.adminIds, env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_API_ROOT);
+  // Instagram Direct chats go through the same engine; Telegram chats are untouched
+  const instagram = createInstagram(env, tgGateway, settings);
+  const gateway = instagram.gateway;
   const leads = new LeadService({ gateway, timeZone: env.TZ_NAME, publicUrl: env.publicUrl });
   const engine = new ConversationEngine({ gateway, ai, settings, leads }, { timeZone: env.TZ_NAME });
   const reminders = new ReminderService(engine, settings, gateway);
-  const app: AppContext = { env, settings, ai, engine, leads, reminders, gateway };
+  const app: AppContext = { env, settings, ai, engine, leads, reminders, gateway, instagram };
 
   registerBusinessHandlers(bot, app);
   registerAdminHandlers(bot, app);
@@ -44,6 +49,7 @@ async function main() {
   let runner: RunnerHandle | undefined;
   const useWebhook = env.BOT_MODE === 'webhook' && Boolean(env.publicUrl);
   const web = createWebApp(app, (e) => {
+    registerInstagramWebhook(e, { ...instagram, engine });
     if (useWebhook) {
       e.post('/telegram/webhook', webhookCallback(bot, 'express', { secretToken: env.WEBHOOK_SECRET }));
     }
@@ -56,6 +62,7 @@ async function main() {
     .setMyCommands(
       [
         { command: 'app', description: 'Mini ilova' },
+        { command: 'instagram', description: 'Instagram panel' },
         { command: 'status', description: 'Tizim holati' },
         { command: 'navbat', description: 'Javob kutayotgan mijozlar' },
         { command: 'stats', description: 'Kunlik statistika' },
@@ -89,12 +96,17 @@ async function main() {
     logger.info('Long polling mode (concurrent runner)');
   }
 
+  await instagram.account.bootstrap(instagram.ig);
+  await instagram.comments.ensureDefaultRule().catch(() => undefined);
+  void instagram.comments.resumePending().catch(() => 0);
+
   // after a restart: messages that arrived while the bot was down / waiting are answered with the full stored context
   void engine.retryPending(0).catch((err) => logger.error({ err: (err as Error).message }, 'Startup retry failed'));
 
   // background jobs: reminders + retry of AI failures / unfinished processing after restarts
   const jobs = [
     setInterval(() => void reminders.tick().catch((err) => logger.error({ err: (err as Error).message }, 'Reminder tick failed')), MINUTE),
+    setInterval(() => void instagram.account.refreshIfNeeded(instagram.ig).catch(() => false), 6 * 60 * MINUTE),
     setInterval(() => void engine.retryPending().catch((err) => logger.error({ err: (err as Error).message }, 'Retry tick failed')), 2 * MINUTE),
   ];
 
@@ -102,6 +114,7 @@ async function main() {
     logger.info({ signal }, 'Shutting down');
     jobs.forEach(clearInterval);
     engine.stopAll();
+    instagram.comments.stopAll();
     if (runner?.isRunning()) await runner.stop().catch(() => undefined);
     server.close();
     await disconnectDatabase().catch(() => undefined);

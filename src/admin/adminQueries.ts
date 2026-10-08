@@ -1,6 +1,6 @@
 import ExcelJS from 'exceljs';
 import { Lead } from '../database/models/Lead';
-import { displayName, statusLabel } from '../leads/leadCard';
+import { clientLinkHtml, displayName, statusLabel } from '../leads/leadCard';
 import { escapeHtml } from '../utils/text';
 import { formatDateTime, startOfDayInTz } from '../utils/time';
 
@@ -13,7 +13,7 @@ export async function formatQueue(timeZone: string): Promise<string> {
   const leads = await getQueue();
   if (!leads.length) return "✅ Navbat bo'sh — javob kutayotgan mijoz yo'q.";
   const lines = leads.map((l, i) => {
-    const who = `<a href="tg://user?id=${l.telegramId}">${escapeHtml(displayName(l))}</a>${l.username ? ' @' + escapeHtml(l.username) : ''}`;
+    const who = clientLinkHtml(l);
     return `${i + 1}. ${l.urgent ? '🔴 ' : ''}${who} · ${escapeHtml(l.source ?? '—')} · TMI ${l.bmi ?? '—'} · ${formatDateTime(l.readyAt, timeZone)}`;
   });
   return `📋 <b>Navbat</b> (${leads.length})\n\n${lines.join('\n')}`;

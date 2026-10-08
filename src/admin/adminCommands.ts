@@ -11,6 +11,8 @@ import { LEAD_STATUSES, type LeadStatus } from '../types/domain';
 import { escapeHtml, truncate } from '../utils/text';
 import { exportCsv, exportXlsx, formatQueue, formatStats, getDailyStats } from './adminQueries';
 import { logger } from '../utils/logger';
+import { createSession } from '../webapp/session';
+import { IgAccount } from '../database/models/instagram';
 import { guessClipCountry } from '../utils/country';
 
 const CLIP_COUNTRY = { ALL: 'hammaga', KR: '🇰🇷 Koreya (won)', UZ: "🇺🇿 O'zbekiston (so'm)", OTHER: '🌍 boshqa chet el' } as const;
@@ -18,6 +20,7 @@ const CLIP_COUNTRY = { ALL: 'hammaga', KR: '🇰🇷 Koreya (won)', UZ: "🇺�
 const HELP = `<b>TEMUR.FIT AI-yordamchi — admin</b>
 
 /app — mini ilova (mijozlar jadvali, sozlamalar, ovozlar)
+/instagram — Instagram panel (Direct, kommentlar, avtomatlar)
 /status — tizim holati (Business ulanish, Gemini, xatolar)
 /navbat — javob kutayotgan mijozlar (eng eskisi birinchi)
 /stats — bugungi statistika (/stats 2026-10-01)
@@ -81,6 +84,21 @@ export function registerAdminHandlers(bot: Bot, app: AppContext): void {
   admin.command(['start', 'help'], (ctx) => sendAppButton(ctx, true));
   admin.command('app', (ctx) => sendAppButton(ctx, false));
 
+  /** Instagram panel: inside Telegram (web app) or in a normal browser (signed link, 30 days). */
+  admin.command(['instagram', 'ig'], async (ctx) => {
+    if (!app.env.publicUrl) {
+      await reply(ctx, "❌ Domen yo'q — Railway → Networking → Generate Domain");
+      return;
+    }
+    const url = `${app.env.publicUrl}/ig/`;
+    const session = createSession(ctx.from!.id, app.env.TELEGRAM_BOT_TOKEN);
+    const kb = new InlineKeyboard().webApp('📸 Instagram panel', url).row().url('🖥 Brauzerda ochish (kompyuter)', `${url}#s=${session}`);
+    await ctx.reply(
+      "📸 <b>Instagram panel</b>\nDirect suhbatlar, kommentlar, avtomatlar va statistika.\n\n<i>Brauzer havolasi 30 kun amal qiladi — uni hech kimga bermang.</i>",
+      { parse_mode: 'HTML', reply_markup: kb },
+    );
+  });
+
   /** Diagnostics: Business connection rights, AI switch, LLM health, recent problems. */
   admin.command('status', async (ctx) => {
     const lines: string[] = ['🩺 <b>Holat</b>'];
@@ -103,6 +121,15 @@ export function registerAdminHandlers(bot: Bot, app: AppContext): void {
       lines.push(`Gemini (${escapeHtml((await app.settings.get('llm_model')) || app.env.LLM_MODEL)}): ✅ ${Date.now() - started} ms`);
     } catch (err) {
       lines.push(`Gemini: ❌ <code>${escapeHtml((err as Error).message.slice(0, 200))}</code>`);
+    }
+    if (app.instagram) {
+      const igAcc = await IgAccount.findById('main').lean();
+      const igSecret = await app.instagram.account.appSecret();
+      lines.push(
+        igAcc?.userId
+          ? `Instagram: ✅ @${escapeHtml(igAcc.username ?? '')} · App Secret ${igSecret ? '✅' : '❌'} · webhook ${igAcc.lastWebhookAt ? '✅ keldi' : "⏳ hali kelmagan"}`
+          : 'Instagram: ⚪️ ulanmagan (/instagram → Sozlamalar)',
+      );
     }
     const priceList = await app.settings.get('price_list');
     const has = async (k: string) => ((await app.settings.get(k)).trim() ? '✅' : '❌');

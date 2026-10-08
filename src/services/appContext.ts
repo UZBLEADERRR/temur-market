@@ -5,6 +5,7 @@ import type { LeadService } from '../leads/leadService';
 import type { ReminderService } from '../reminders/reminderService';
 import type { TelegramGateway } from '../telegram/gateway';
 import type { SettingsService } from './settings';
+import type { InstagramModule } from '../instagram';
 
 export interface AppContext {
   env: Env;
@@ -14,4 +15,5 @@ export interface AppContext {
   leads: LeadService;
   reminders: ReminderService;
   gateway: TelegramGateway;
+  instagram?: InstagramModule;
 }

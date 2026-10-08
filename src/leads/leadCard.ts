@@ -35,6 +35,15 @@ export function displayName(lead: Pick<LeadData, 'name' | 'firstName' | 'lastNam
   return lead.name || [lead.firstName, lead.lastName].filter(Boolean).join(' ') || 'Nomaʼlum';
 }
 
+/** Tappable client name for admin messages: Telegram profile or Instagram profile. */
+export function clientLinkHtml(lead: Pick<LeadData, 'name' | 'firstName' | 'lastName' | 'username' | 'telegramId' | 'channel'>, withUsername = true): string {
+  const name = escapeHtml(displayName(lead));
+  if (lead.channel === 'instagram') {
+    return lead.username ? `📸 <a href="https://instagram.com/${encodeURIComponent(lead.username)}">${name}</a> @${escapeHtml(lead.username)}` : `📸 ${name}`;
+  }
+  return `<a href="tg://user?id=${lead.telegramId}">${name}</a>${withUsername && lead.username ? ' @' + escapeHtml(lead.username) : ''}`;
+}
+
 /** HTML lead card sent to the admin chat (Telegram parse_mode HTML). */
 export function formatLeadCard(lead: LeadData & { _id?: unknown }, timeZone: string): string {
   const a = lead.answers ?? {};
@@ -51,13 +60,14 @@ export function formatLeadCard(lead: LeadData & { _id?: unknown }, timeZone: str
         : lead.status === 'SALES'
           ? '📋 <b>ANKETA TUGADI — AI kursni sotyapti</b>'
           : '🔥 <b>YANGI LEAD</b>';
-  const userLink = `<a href="tg://user?id=${lead.telegramId}">${escapeHtml(displayName(lead))}</a>`;
+  const ig = lead.channel === 'instagram';
+  const userLink = ig ? clientLinkHtml(lead, false) : `<a href="tg://user?id=${lead.telegramId}">${escapeHtml(displayName(lead))}</a>`;
   const lines = [
     head,
     '',
     `👤 Ism: ${userLink}`,
-    `📱 Username: ${lead.username ? '@' + escapeHtml(lead.username) : '—'}`,
-    `🆔 Telegram ID: <code>${lead.telegramId}</code>`,
+    ig ? `📸 Instagram: ${lead.username ? '@' + escapeHtml(lead.username) : '—'}` : `📱 Username: ${lead.username ? '@' + escapeHtml(lead.username) : '—'}`,
+    ig ? (lead.igCommentText ? `💬 Komment: <i>${escapeHtml(truncate(lead.igCommentText, 200))}</i>` : '') : `🆔 Telegram ID: <code>${lead.telegramId}</code>`,
     `📍 Manba: ${v(lead.source)}`,
     `🌐 Til: ${lead.language === 'ru' ? 'rus' : "o'zbek"}`,
     '',
