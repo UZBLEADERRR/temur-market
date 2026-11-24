@@ -42,11 +42,7 @@ export async function getDailyStats(timeZone: string, day = new Date()): Promise
     Lead.countDocuments({ rejectedAt: range }),
     Lead.countDocuments({ readyAt: range, urgent: true }),
     Lead.countDocuments({ status: 'READY' }),
-    Lead.aggregate<{ _id: string; count: number }>([
-      { $match: { createdAt: range } },
-      { $group: { _id: '$source', count: { $sum: 1 } } },
-      { $sort: { count: -1 } },
-    ]),
+    Lead.countBy('source', { createdAt: range }),
   ]);
   return {
     date: from,
@@ -57,7 +53,7 @@ export async function getDailyStats(timeZone: string, day = new Date()): Promise
     rejected,
     urgent,
     waiting,
-    bySource: bySource.map((s) => ({ source: s._id ?? 'unknown', count: s.count })),
+    bySource: bySource.map((s) => ({ source: s.value ?? 'unknown', count: s.count })),
   };
 }
 

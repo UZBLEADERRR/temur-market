@@ -1,7 +1,7 @@
 import { webhookCallback } from 'grammy';
 import { run, type RunnerHandle } from '@grammyjs/runner';
 import { assertProductionEnv, env } from './config/env';
-import { connectDatabase, disconnectDatabase } from './database/connection';
+import { connectDatabase, disconnectDatabase, purgeOldUpdates } from './database/connection';
 import { runDataMigrations } from './database/migrations';
 import { SettingsService } from './services/settings';
 import { GeminiClient } from './ai/geminiClient';
@@ -20,7 +20,7 @@ import { MINUTE } from './utils/time';
 
 async function main() {
   assertProductionEnv(env);
-  await connectDatabase(env.MONGODB_URI);
+  await connectDatabase(env.DATABASE_URL);
   await runDataMigrations();
 
   const settings = new SettingsService();
@@ -98,6 +98,15 @@ async function main() {
   const jobs = [
     setInterval(() => void reminders.tick().catch((err) => logger.error({ err: (err as Error).message }, 'Reminder tick failed')), TICK),
     setInterval(() => void engine.retryPending().catch((err) => logger.error({ err: (err as Error).message }, 'Retry tick failed')), TICK),
+    // Mongo'da processed_updates'ni TTL indeks tozalardi; Postgres'da TTL yo'q.
+    // Kuniga bir marta yetadi — bu jadval faqat takroriy update'lardan saqlaydi.
+    setInterval(
+      () =>
+        void purgeOldUpdates()
+          .then((n) => (n ? logger.info({ removed: n }, 'Eski update kalitlari tozalandi') : undefined))
+          .catch((err) => logger.error({ err: (err as Error).message }, 'Purge tick failed')),
+      24 * 60 * MINUTE,
+    ),
   ];
 
   const shutdown = async (signal: string) => {

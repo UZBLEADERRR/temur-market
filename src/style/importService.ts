@@ -7,7 +7,7 @@ export interface ImportResult {
   examples: number;
 }
 
-/** Import a Telegram export file (HTML / JSON / TXT) → anonymized style examples in MongoDB. */
+/** Import a Telegram export file (HTML / JSON / TXT) → anonymized style examples in PostgreSQL. */
 export async function importChatExport(
   fileName: string,
   content: string,

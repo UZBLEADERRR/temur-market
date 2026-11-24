@@ -2,11 +2,10 @@
  * Manual test scenarios against the REAL LLM (needs LLM_API_KEY) without Telegram:
  *   npm run simulate            → runs all scenarios A–O
  *   npm run simulate -- F       → only scenario F
- * Messages are printed instead of being sent. Uses MONGODB_URI (use a separate test database!).
+ * Messages are printed instead of being sent. Uses DATABASE_URL (use a separate test database!).
  */
-import mongoose from 'mongoose';
 import { env } from '../config/env';
-import { connectDatabase } from '../database/connection';
+import { connectDatabase, disconnectDatabase } from '../database/connection';
 import { SettingsService } from '../services/settings';
 import { AiService } from '../ai/aiService';
 import { GeminiClient } from '../ai/geminiClient';
@@ -52,7 +51,7 @@ class PrintGateway implements TelegramGateway {
 }
 
 async function main() {
-  await connectDatabase(env.MONGODB_URI);
+  await connectDatabase(env.DATABASE_URL);
   const only = process.argv[2]?.toUpperCase();
   const settings = new SettingsService();
   const real = new GeminiClient({ apiKey: env.LLM_API_KEY, model: env.LLM_MODEL, baseUrl: env.LLM_BASE_URL, timeoutMs: env.LLM_TIMEOUT_MS });
@@ -77,7 +76,7 @@ async function main() {
     const lead = await Lead.findOne({ chatId }).lean();
     console.log(`   → status=${lead?.status} mode=${lead?.mode} urgent=${lead?.urgent} source=${lead?.source} TMI=${lead?.bmi ?? '-'} answers=${JSON.stringify(lead?.answers)}`);
   }
-  await mongoose.disconnect();
+  await disconnectDatabase();
 }
 
 main().catch((err) => {

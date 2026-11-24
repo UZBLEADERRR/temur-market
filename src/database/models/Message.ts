@@ -1,21 +1,19 @@
-import { Schema, model, type InferSchemaType } from 'mongoose';
+import { defineModel, type Doc } from '../odm';
 
-const MessageSchema = new Schema(
-  {
-    leadId: { type: Schema.Types.ObjectId, ref: 'Lead', required: true, index: true },
-    telegramMessageId: Number,
-    telegramId: Number,
-    direction: { type: String, enum: ['incoming', 'outgoing'], required: true },
-    sender: { type: String, enum: ['client', 'temur', 'ai'], required: true },
-    kind: { type: String, default: 'text' },
-    text: { type: String, default: '' },
-    processed: { type: Boolean, default: true },
-    meta: { type: Schema.Types.Mixed },
-  },
-  { timestamps: true, collection: 'messages' },
-);
+export interface MessageData {
+  leadId: string;
+  telegramMessageId?: number | null;
+  telegramId?: number | null;
+  direction: 'incoming' | 'outgoing';
+  sender: 'client' | 'temur' | 'ai';
+  kind: string;
+  text: string;
+  processed: boolean;
+  meta?: Record<string, unknown> | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
 
-MessageSchema.index({ leadId: 1, createdAt: 1 });
+export type MessageDoc = Doc<MessageData>;
 
-export type MessageData = InferSchemaType<typeof MessageSchema>;
-export const Message = model('Message', MessageSchema);
+export const Message = defineModel<MessageData>('messages', { json: ['meta'] });

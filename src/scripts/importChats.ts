@@ -13,7 +13,7 @@ import { importChatExport } from '../style/importService';
 async function main() {
   const files = process.argv.slice(2);
   if (!files.length) throw new Error('Usage: npm run import:chats -- <export.html|result.json> ...');
-  await connectDatabase(env.MONGODB_URI);
+  await connectDatabase(env.DATABASE_URL);
   const coachName = await new SettingsService().get('coach_name');
   for (const f of files) {
     const res = await importChatExport(path.basename(f), fs.readFileSync(f, 'utf8'), { coachId: env.TEMUR_TELEGRAM_ID, coachName });

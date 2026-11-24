@@ -21,7 +21,7 @@ const EnvSchema = z.object({
   TELEGRAM_ADMIN_ID: csvIds,
   ADMIN_IDS: csvIds,
   TEMUR_TELEGRAM_ID: z.coerce.number().optional(),
-  MONGODB_URI: z.string().default('mongodb://127.0.0.1:27017/temur_fit'),
+  DATABASE_URL: z.string().default('postgres://postgres:postgres@127.0.0.1:5432/temur_fit'),
   LLM_API_KEY: z.string().default(''),
   LLM_MODEL: z.string().default('gemini-3.8-flash'),
   LLM_BASE_URL: z.string().default('https://generativelanguage.googleapis.com/v1beta'),

@@ -1,21 +1,24 @@
-import mongoose from 'mongoose';
 import { logger } from '../utils/logger';
+import { getPool } from './odm';
 
 /**
- * Cleans up data left by the (rolled back) sales version so this version runs safely:
- * - leads in the removed 'SALES' status → READY / MANUAL (they are in the coach's queue);
- * - imported 'sales' style examples (prices masked as [narx]) are disabled so the questionnaire never talks about prices.
- * Uses raw collections because the current schemas do not know these values.
+ * Orqaga qaytarilgan "sotuv" versiyasidan qolgan ma'lumotlarni tozalaydi:
+ * - o'chirilgan 'SALES' statusidagi leadlar → READY / MANUAL (ular murabbiy navbatida);
+ * - import qilingan 'sales' uslub namunalari ([narx] bilan) o'chiriladi, anketa narx haqida gapirmasin.
+ *
+ * To'g'ridan-to'g'ri SQL: bu qiymatlar joriy modellarda yo'q.
  */
 export async function runDataMigrations(): Promise<void> {
-  const db = mongoose.connection.db;
-  if (!db) return;
-  const leads = await db.collection('leads').updateMany(
-    { status: 'SALES' },
-    { $set: { status: 'READY', mode: 'MANUAL', readyAt: new Date() }, $unset: { followUpAt: '' } },
+  const pool = getPool();
+  // Mongo versiyasi bu yerda followUpAt'ni ham o'chirardi; yangi sxemada
+  // bunday ustun yo'q, shuning uchun o'chiradigan narsa qolmadi.
+  const leads = await pool.query(
+    `UPDATE leads SET "status" = 'READY', "mode" = 'MANUAL', "readyAt" = now(), "updatedAt" = now() WHERE "status" = 'SALES'`,
   );
-  const examples = await db.collection('style_examples').updateMany({ kind: 'sales', enabled: true }, { $set: { enabled: false } });
-  if (leads.modifiedCount || examples.modifiedCount) {
-    logger.info({ leads: leads.modifiedCount, salesExamples: examples.modifiedCount }, 'Data migrated after rollback');
+  const examples = await pool.query(
+    `UPDATE style_examples SET "enabled" = FALSE, "updatedAt" = now() WHERE "kind" = 'sales' AND "enabled" = TRUE`,
+  );
+  if (leads.rowCount || examples.rowCount) {
+    logger.info({ leads: leads.rowCount, salesExamples: examples.rowCount }, 'Data migrated after rollback');
   }
 }

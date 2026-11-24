@@ -20,10 +20,15 @@ sozlamalar tinch ishlashga qaratilgan:
 | Fon tiklari | 5 daqiqada. Eslatmalar ~1 soat va ~20 soatda ketadi — daqiqalik tekshiruvning ma'nosi yo'q edi |
 | `exceljs` | Faqat `/export` chaqirilganda yuklanadi. Doim yuklansa 11 MB bekorga band turardi (83 → 73 MB) |
 
-**Baza.** Railway'da alohida MongoDB xizmati oyiga alohida pul yeydi.
-Lead anketasi juda kichik ma'lumot, shuning uchun MongoDB Atlas'ning
-bepul darajasi (M0) yetadi — `MONGODB_URI` ni o'shanga qaratish kifoya,
-kodda hech narsa o'zgarmaydi.
+**Baza.** PostgreSQL. Ulanish `pg` (node-postgres) orqali — Prisma'ga
+o'xshash ORM emas, chunki uning so'rov dvigateli o'zi ~40 MB xotira oladi;
+`pg` esa ~2 MB. Modellar `src/database/odm.ts` dagi yupqa moslik qatlami
+ustida turadi (quyida).
+
+Railway'da alohida baza xizmati oyiga alohida pul yeydi. Lead anketasi juda
+kichik ma'lumot, shuning uchun eng kichik Postgres tarifi yetadi — yoki
+tashqi bepul Postgres (Neon, Supabase) ham bo'ladi: `DATABASE_URL` ni
+o'shanga qaratish kifoya, kodda hech narsa o'zgarmaydi.
 
 > Xizmatlarni sanab ko'ring: bitta bot uchun bitta xizmat yetadi.
 > Railway'da tasodifan qolib ketgan ikkinchi deploy yoki bog'lanmagan
@@ -83,7 +88,7 @@ Bot ichida (`/settings`, `/set`, `/prompt`) yoki mini ilovaning **Sozlamalar** b
 - LLM modeli va temperature, namunalar soni, «yozmoqda» tezligi;
 - AI ni butunlay o'chirish (`ai_enabled`).
 
-O'zgarishlar MongoDB'ga saqlanadi va bir zumda kuchga kiradi.
+O'zgarishlar bazaga saqlanadi va bir zumda kuchga kiradi.
 
 ### Halollik
 AI Temur nomidan yozadi va o'zini yordamchi deb tanishtirmaydi. Lekin mijoz jiddiy «botmisiz?» deb so'rasa, topshiriqning 7-bandi bo'yicha rost javob beradi: «Ha, savollarga AI-yordamchim javob beryapti, lekin hammasini o'zim ko'rib turibman. Hozir o'zim yozaman.» Shundan keyin chat Temurga o'tadi. AI hech qachon «bot emasman» deb yozmaydi.
@@ -123,13 +128,57 @@ yoki kodni mini ilovaning **Manbalar** bo'limida qo'shing. Kodsiz `#video_03` he
 
 **Muhim:** Temur (va boshqa adminlar) botning o'zida `/start` bosishi kerak. Aks holda bot ularga kartochka yubora olmaydi.
 
-## 5. MongoDB
+## 5. PostgreSQL
 
-- **Lokal:** `docker compose up -d mongo`
-- **Railway:** loyihaga **MongoDB** servisini qo'shing va bot servisida `MONGODB_URI=${{MongoDB.MONGO_URL}}` qilib bog'lang.
-- **Atlas:** connection string'ni `MONGODB_URI` ga qo'ying.
+- **Lokal:** `docker compose up -d postgres`
+- **Railway:** loyihaga **Postgres** servisini qo'shing va bot servisida `DATABASE_URL=${{Postgres.DATABASE_URL}}` qilib bog'lang.
+- **Tashqi baza (Neon, Supabase):** connection string'ni `DATABASE_URL` ga qo'ying.
 
-Kolleksiyalar: `leads` (lead + suhbat holati), `messages`, `settings`, `style_examples`, `style_profiles`, `campaigns`, `reminders`, `admin_events`, `business_connections`, `processed_updates` (idempotentlik uchun, 14 kunlik TTL).
+Jadvallar: `leads` (lead + suhbat holati), `messages`, `settings`, `style_examples`, `style_profiles`, `campaigns`, `reminders`, `admin_events`, `business_connections`, `processed_updates` (idempotentlik uchun).
+
+Sxema `src/database/schema.ts` da, hammasi `IF NOT EXISTS` bilan va har ishga
+tushishda bajariladi — ya'ni deploy ma'lumotga tegmaydi va alohida migratsiya
+qadami kerak emas. Alohida `.sql` fayl emasligining sababi: uni build vaqtida
+nusxalash va ishlash vaqtida yo'lini topish kerak bo'lardi, Railway'da ikkisi
+ham sezilmasdan buziladigan joy.
+
+### Mongoose'dan Postgres'ga: moslik qatlami
+
+Loyiha avval MongoDB'da edi. Kodda ~160 ta so'rov bor va ko'pi "hujjatni
+o'zgartirib `.save()` qilish" uslubida yozilgan, shuning uchun har birini
+qo'lda SQL ga aylantirish o'rniga `src/database/odm.ts` da mongoose'ning shu
+loyiha ishlatgan qismi qaytarildi. Chaqiruv joylari tegilmadi — xavf bitta
+faylga jamlandi va `tests/odm.test.ts` dagi 39 ta test bilan qoplandi.
+
+Qatlam ataylab TOR — faqat shu loyihada kerak bo'lgani bor:
+
+| Qism | Qo'llanadigani |
+|---|---|
+| Filtr | tenglik, `null`, `$in` `$nin` `$ne` `$lt` `$lte` `$gt` `$gte` `$or` `$and` `$exists` |
+| Yangilash | `$set`, `$unset`, `upsert`, jsonb ichidagi `"values.kalit"` yo'li |
+| Zanjir | `.sort()` `.limit()` `.select()` `.lean()` |
+| Hujjat | maydonlar, `._id`, `.id`, `.save()`, `.set()`, `.toObject()` |
+
+Noma'lum operator jim o'tib ketmaydi — xato chiqaradi.
+
+Mongo bilan Postgres farq qiladigan uch joy, har biri test bilan mahkamlangan:
+
+- **`$unset` → `DEFAULT`, `NULL` emas.** Mongo'da `$unset` maydonni olib
+  tashlaydi va mongoose o'qiganda standart qiymatni qo'yadi. `NULL` yozish
+  `NOT NULL` ustunlarni buzardi (`/reset` shunda yiqilgan edi).
+- **Bitta ustunga bitta tayinlash.** Ikkita `values.x` yo'li bitta
+  `jsonb_set(jsonb_set(...))` ifodasiga yig'iladi, aks holda Postgres
+  "multiple assignments to same column" deydi (sozlamalarni saqlash shunda
+  yiqilgan edi).
+- **jsonb ichidagi massiv.** `pg` JS massivini Postgres massivi deb yuboradi,
+  shuning uchun jsonb ustunga tushadigan qiymat o'zimiz JSON matnga
+  aylantiriladi (`adminCardMessageIds` shunda yiqilgan edi).
+
+`aggregate()` quvuri tarjima qilinmaydi. U ishlatilgan ikki joy uchun aniq
+metod bor: `countBy(maydon, filtr)` va `sample(n)`.
+
+Mongo'da `processed_updates` TTL indeks bilan o'zini tozalardi. Postgres'da
+TTL yo'q, shuning uchun buni fon ishi kuniga bir marta qiladi.
 
 ## 6. LLM (Gemini)
 
@@ -147,7 +196,7 @@ Model faqat JSON qaytaradi va backend uni Zod bilan tekshiradi. Noto'g'ri javob 
 | `TELEGRAM_BOT_TOKEN` | BotFather token |
 | `TELEGRAM_ADMIN_ID` | Kartochka oladigan va admin bo'lgan ID'lar (vergul bilan) |
 | `TEMUR_TELEGRAM_ID` | Temurning ID si (admin ham bo'ladi) |
-| `MONGODB_URI` | MongoDB |
+| `DATABASE_URL` | PostgreSQL ulanish manzili |
 | `LLM_API_KEY`, `LLM_MODEL` | Gemini |
 | `PUBLIC_URL` | Mini ilova uchun https manzil. Railway'da `RAILWAY_PUBLIC_DOMAIN` avtomatik olinadi |
 | `BOT_MODE` | `polling` (standart) yoki `webhook` |
@@ -187,19 +236,19 @@ Natijani mini ilovaning **Uslub** bo'limida ko'rib chiqing. Keraksiz namunani o'
 
 ```bash
 npm install
-docker compose up -d mongo
+docker compose up -d postgres
 cp .env.example .env   # to'ldiring
 npm run dev
 ```
-Testlar (MongoDB kerak, standart `mongodb://127.0.0.1:27017/temur_fit_test`, yoki `TEST_MONGODB_URI`):
+Testlar (PostgreSQL kerak, standart `postgres://postgres@127.0.0.1:5432/temur_fit_test`, yoki `TEST_DATABASE_URL`). Baza jadvallarini testlar o'zi yaratadi:
 ```bash
 npm test
 npm run typecheck
 ```
 Haqiqiy Gemini bilan 14 ta stsenariy (A–O, Telegramsiz, xabarlar konsolga chiqadi; alohida test bazasidan foydalaning):
 ```bash
-MONGODB_URI=mongodb://127.0.0.1:27017/temur_sim npm run simulate        # hammasi
-MONGODB_URI=mongodb://127.0.0.1:27017/temur_sim npm run simulate -- F   # faqat «botmisiz?»
+DATABASE_URL=postgres://postgres@127.0.0.1:5432/temur_sim npm run simulate        # hammasi
+DATABASE_URL=postgres://postgres@127.0.0.1:5432/temur_sim npm run simulate -- F   # faqat «botmisiz?»
 ```
 
 ## 12. Docker
@@ -213,7 +262,7 @@ curl localhost:3000/health
 ## 13. Production — Railway
 
 1. Railway → **New Project → Deploy from GitHub repo** → `temur-market`. `railway.json` Dockerfile orqali build qiladi.
-2. **+ New → Database → MongoDB**. Bot servisida `MONGODB_URI=${{MongoDB.MONGO_URL}}` qo'shing.
+2. **+ New → Database → Postgres**. Bot servisida `DATABASE_URL=${{Postgres.DATABASE_URL}}` qo'shing.
 3. Bot servisi → **Variables** bo'limiga `.env.example` dagi qiymatlarni kiriting.
 4. **Settings → Networking → Generate Domain**. Mini ilova manzili `https://<domain>/app/` bo'ladi.
 5. **Replicas = 1** qoldiring: polling rejimida ikkita nusxa bir-biriga xalaqit beradi.
@@ -226,14 +275,14 @@ Webhook kerak bo'lsa: `BOT_MODE=webhook`, `WEBHOOK_SECRET=<tasodifiy>`. Webhook 
 - `GET /health` — Railway healthcheck uchun.
 - Strukturali JSON loglar (pino) yoziladi: kiruvchi va chiquvchi xabar, AI so'rovi metama'lumoti (model, ms, tokenlar), holat o'zgarishi, `[TAYYOR]`, manual takeover, eslatmalar, xatolar. Mijoz matni va maxfiy kalitlar loglarga yozilmaydi.
 - Adminga avtomatik xabarlar: yangi lead kartochkasi, 🔴 shoshilinch lead, AI ishlamay qolgani, Business ulanish holati.
-- `admin_events` kolleksiyasi audit uchun.
+- `admin_events` jadvali audit uchun.
 
 ## 15. Backup
 
-- **Railway MongoDB:** servis → **Backups** (yoqib qo'ying) yoki muntazam `mongodump`:
+- **Railway Postgres:** servis → **Backups** (yoqib qo'ying) yoki muntazam `pg_dump`:
   ```bash
-  mongodump --uri "$MONGODB_URI" --archive=backup_$(date +%F).gz --gzip
-  mongorestore --uri "$MONGODB_URI" --archive=backup_2026-10-02.gz --gzip
+  pg_dump "$DATABASE_URL" --format=custom --file=backup_$(date +%F).dump
+  pg_restore --dbname "$DATABASE_URL" --clean --if-exists backup_2026-10-02.dump
   ```
 - Leadlarni Excel'ga tez saqlash: `/export`.
 

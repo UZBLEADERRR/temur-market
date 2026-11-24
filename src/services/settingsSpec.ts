@@ -16,7 +16,7 @@ const q = (key: string, label: string, uz: string, ru: string): SettingDef[] => 
   { key: `${key}_ru`, label: `${label} (RU)`, group: 'Savollar', type: 'text', default: ru },
 ];
 
-/** Every admin-editable setting. Values live in MongoDB (settings collection), defaults here. */
+/** Every admin-editable setting. Values live in PostgreSQL (settings table), defaults here. */
 export const SETTINGS_SPEC: SettingDef[] = [
   { key: 'ai_enabled', label: 'AI yoqilgan (umumiy)', group: 'Asosiy', type: 'boolean', default: true },
   { key: 'coach_name', label: 'Murabbiy ismi', group: 'Murabbiy', type: 'text', default: 'Temur' },

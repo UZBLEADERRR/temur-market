@@ -1,90 +1,33 @@
-import { Schema, model, type InferSchemaType } from 'mongoose';
+import { defineModel, type Doc } from '../odm';
 
-/** Idempotency: one row per processed Telegram update / message key. */
-const ProcessedUpdateSchema = new Schema(
-  {
-    key: { type: String, required: true, unique: true },
-    createdAt: { type: Date, default: Date.now, expires: 60 * 60 * 24 * 14 },
-  },
-  { collection: 'processed_updates' },
-);
-export const ProcessedUpdate = model('ProcessedUpdate', ProcessedUpdateSchema);
+/** Idempotentlik: har bir ishlangan Telegram update uchun bitta qator. */
+export const ProcessedUpdate = defineModel('processed_updates', { timestamps: false });
 
-const BusinessConnectionSchema = new Schema(
-  {
-    connectionId: { type: String, required: true, unique: true },
-    userId: { type: Number, required: true },
-    userChatId: Number,
-    isEnabled: { type: Boolean, default: true },
-    canReply: { type: Boolean, default: true },
-  },
-  { timestamps: true, collection: 'business_connections' },
-);
-export const BusinessConnection = model('BusinessConnection', BusinessConnectionSchema);
+export const BusinessConnection = defineModel('business_connections');
 
-const SettingsSchema = new Schema(
-  {
-    _id: { type: String, default: 'main' },
-    values: { type: Schema.Types.Mixed, default: {} },
-  },
-  { timestamps: true, collection: 'settings' },
-);
-export const SettingsDoc = model('Settings', SettingsSchema);
+export const SettingsDoc = defineModel('settings', { json: ['values'] });
 
-const StyleExampleSchema = new Schema(
-  {
-    client: { type: String, required: true },
-    coach: { type: [String], required: true },
-    language: { type: String, enum: ['uz', 'ru'], default: 'uz' },
-    tokens: { type: [String], default: [] },
-    source: { type: String, default: 'import' },
-    enabled: { type: Boolean, default: true },
-  },
-  { timestamps: true, collection: 'style_examples' },
-);
-export type StyleExampleData = InferSchemaType<typeof StyleExampleSchema>;
-export const StyleExample = model('StyleExample', StyleExampleSchema);
+export interface StyleExampleData {
+  client: string;
+  coach: string[];
+  language: 'uz' | 'ru';
+  tokens: string[];
+  source: string;
+  enabled: boolean;
+  /** Orqaga qaytarilgan "sotuv" versiyasidan qolgan yozuvlarni ajratish uchun. */
+  kind?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
 
-const StyleProfileSchema = new Schema(
-  {
-    profile: { type: Schema.Types.Mixed, required: true },
-    stats: { type: Schema.Types.Mixed },
-    exampleCount: Number,
-    active: { type: Boolean, default: true },
-  },
-  { timestamps: true, collection: 'style_profiles' },
-);
-export const StyleProfile = model('StyleProfile', StyleProfileSchema);
+export type StyleExampleDoc = Doc<StyleExampleData>;
 
-const CampaignSchema = new Schema(
-  {
-    code: { type: String, required: true, unique: true },
-    source: { type: String, required: true },
-    description: String,
-  },
-  { timestamps: true, collection: 'campaigns' },
-);
-export const Campaign = model('Campaign', CampaignSchema);
+export const StyleExample = defineModel<StyleExampleData>('style_examples');
 
-const ReminderSchema = new Schema(
-  {
-    leadId: { type: Schema.Types.ObjectId, ref: 'Lead', required: true, index: true },
-    number: { type: Number, required: true },
-    sentAt: { type: Date, default: Date.now },
-    text: String,
-  },
-  { collection: 'reminders' },
-);
-ReminderSchema.index({ leadId: 1, number: 1 }, { unique: true });
-export const Reminder = model('Reminder', ReminderSchema);
+export const StyleProfile = defineModel('style_profiles', { json: ['profile', 'stats'] });
 
-const AdminEventSchema = new Schema(
-  {
-    type: { type: String, required: true },
-    leadId: { type: Schema.Types.ObjectId, ref: 'Lead' },
-    actorId: Number,
-    data: Schema.Types.Mixed,
-  },
-  { timestamps: true, collection: 'admin_events' },
-);
-export const AdminEvent = model('AdminEvent', AdminEventSchema);
+export const Campaign = defineModel('campaigns');
+
+export const Reminder = defineModel('reminders', { timestamps: false });
+
+export const AdminEvent = defineModel('admin_events', { json: ['data'] });

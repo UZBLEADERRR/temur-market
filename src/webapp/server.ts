@@ -1,7 +1,6 @@
 import express, { type NextFunction, type Request, type Response } from 'express';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { Types } from 'mongoose';
 import { Lead } from '../database/models/Lead';
 import { Message } from '../database/models/Message';
 import { AdminEvent, Campaign, StyleExample } from '../database/models/misc';
@@ -94,8 +93,7 @@ export function createWebApp(app: AppContext, extra?: (e: express.Express) => vo
   api.get(
     '/leads/:id',
     asyncH(async (req, res) => {
-      if (!Types.ObjectId.isValid(String(req.params.id))) return res.status(404).json({ error: 'not found' });
-      const lead = await Lead.findById(req.params.id).lean();
+      const lead = await Lead.findById(String(req.params.id)).lean();
       if (!lead) return res.status(404).json({ error: 'not found' });
       const messages = await Message.find({ leadId: lead._id }).sort({ createdAt: 1 }).limit(500).select('sender text kind createdAt').lean();
       res.json({ lead: { ...lead, id: String(lead._id), displayName: displayName(lead), businessConnectionId: undefined }, messages });
@@ -135,7 +133,7 @@ export function createWebApp(app: AppContext, extra?: (e: express.Express) => vo
     '/leads/:id/always-on',
     asyncH(async (req, res) => {
       const on = Boolean(req.body?.on);
-      const lead = await Lead.findById(req.params.id);
+      const lead = await Lead.findById(String(req.params.id));
       if (!lead) return res.status(404).json({ error: 'not found' });
       lead.alwaysOn = on;
       if (on) lead.mode = 'AI';
@@ -149,9 +147,9 @@ export function createWebApp(app: AppContext, extra?: (e: express.Express) => vo
     '/leads/:id',
     asyncH(async (req, res) => {
       app.engine.cancel(String(req.params.id));
-      await Message.deleteMany({ leadId: req.params.id });
-      await Lead.deleteOne({ _id: req.params.id });
-      await AdminEvent.create({ type: 'lead_deleted', actorId: req.adminId, data: { leadId: req.params.id } });
+      await Message.deleteMany({ leadId: String(req.params.id) });
+      await Lead.deleteOne({ _id: String(req.params.id) });
+      await AdminEvent.create({ type: 'lead_deleted', actorId: req.adminId, data: { leadId: String(req.params.id) } });
       res.json({ ok: true });
     }),
   );
@@ -159,7 +157,7 @@ export function createWebApp(app: AppContext, extra?: (e: express.Express) => vo
   api.post(
     '/leads/:id/notes',
     asyncH(async (req, res) => {
-      await Lead.updateOne({ _id: req.params.id }, { $set: { notes: String(req.body?.notes ?? '').slice(0, 5000) } });
+      await Lead.updateOne({ _id: String(req.params.id) }, { $set: { notes: String(req.body?.notes ?? '').slice(0, 5000) } });
       res.json({ ok: true });
     }),
   );
@@ -170,7 +168,7 @@ export function createWebApp(app: AppContext, extra?: (e: express.Express) => vo
     asyncH(async (req, res) => {
       const text = String(req.body?.text ?? '').trim();
       if (!text) return res.status(400).json({ error: 'empty' });
-      const lead = await Lead.findById(req.params.id);
+      const lead = await Lead.findById(String(req.params.id));
       if (!lead) return res.status(404).json({ error: 'not found' });
       try {
         const sent = await app.gateway.sendBusinessMessage(lead.businessConnectionId, lead.chatId, text.slice(0, 4000));
@@ -196,7 +194,7 @@ export function createWebApp(app: AppContext, extra?: (e: express.Express) => vo
   api.post(
     '/leads/:id/open',
     asyncH(async (req, res) => {
-      const lead = await Lead.findById(req.params.id).lean();
+      const lead = await Lead.findById(String(req.params.id)).lean();
       if (!lead || !req.adminId) return res.status(404).json({ error: 'not found' });
       await app.gateway.notifyAdmins(
         `💬 Chatni ochish: <a href="tg://user?id=${lead.telegramId}">${escapeHtml(displayName(lead))}</a>${lead.username ? ' @' + escapeHtml(lead.username) : ''}\n🆔 <code>${lead.telegramId}</code>`,
@@ -211,10 +209,10 @@ export function createWebApp(app: AppContext, extra?: (e: express.Express) => vo
       const day = typeof req.query.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date) ? new Date(`${req.query.date}T12:00:00Z`) : new Date();
       const [stats, totals, queue] = await Promise.all([
         getDailyStats(app.env.TZ_NAME, day),
-        Lead.aggregate<{ _id: string; count: number }>([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
+        Lead.countBy('status'),
         getQueue(5),
       ]);
-      res.json({ stats, totals: Object.fromEntries(totals.map((t) => [t._id, t.count])), queueSize: queue.length });
+      res.json({ stats, totals: Object.fromEntries(totals.map((t) => [t.value, t.count])), queueSize: queue.length });
     }),
   );
 
@@ -272,14 +270,14 @@ export function createWebApp(app: AppContext, extra?: (e: express.Express) => vo
   api.patch(
     '/examples/:id',
     asyncH(async (req, res) => {
-      await StyleExample.updateOne({ _id: req.params.id }, { $set: { enabled: Boolean(req.body?.enabled) } });
+      await StyleExample.updateOne({ _id: String(req.params.id) }, { $set: { enabled: Boolean(req.body?.enabled) } });
       res.json({ ok: true });
     }),
   );
   api.delete(
     '/examples/:id',
     asyncH(async (req, res) => {
-      await StyleExample.deleteOne({ _id: req.params.id });
+      await StyleExample.deleteOne({ _id: String(req.params.id) });
       res.json({ ok: true });
     }),
   );
@@ -299,7 +297,7 @@ export function createWebApp(app: AppContext, extra?: (e: express.Express) => vo
     '/campaigns',
     asyncH(async (_req, res) => {
       const list = await Campaign.find().sort({ source: 1 }).lean();
-      const counts = await Lead.aggregate<{ _id: string; count: number }>([{ $group: { _id: '$source', count: { $sum: 1 } } }]);
+      const counts = (await Lead.countBy('source')).map((x) => ({ _id: x.value, count: x.count }));
       res.json({ campaigns: list.map((c) => ({ ...c, id: String(c._id) })), leadsBySource: counts });
     }),
   );
@@ -316,7 +314,7 @@ export function createWebApp(app: AppContext, extra?: (e: express.Express) => vo
   api.delete(
     '/campaigns/:id',
     asyncH(async (req, res) => {
-      await Campaign.deleteOne({ _id: req.params.id });
+      await Campaign.deleteOne({ _id: String(req.params.id) });
       res.json({ ok: true });
     }),
   );

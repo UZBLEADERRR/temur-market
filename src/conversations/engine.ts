@@ -1,4 +1,3 @@
-import { Types } from 'mongoose';
 import { Lead, type LeadDoc } from '../database/models/Lead';
 import { Message } from '../database/models/Message';
 import { AdminEvent, Reminder } from '../database/models/misc';
@@ -836,7 +835,7 @@ export class ConversationEngine {
   }
 }
 
-/** Lead answers as a plain object without nulls / mongoose wrappers. */
+/** Lead answers as a plain object without nulls. */
 export function plainAnswers(lead: { answers?: unknown }): LeadAnswers {
   const a = lead.answers as { toObject?: () => Record<string, unknown> } | Record<string, unknown> | undefined;
   const obj = (a && typeof (a as { toObject?: unknown }).toObject === 'function' ? (a as { toObject: () => Record<string, unknown> }).toObject() : (a ?? {})) as Record<string, unknown>;
@@ -882,4 +881,3 @@ function sanitizeExtracted(x: LeadAnswers): LeadAnswers {
 }
 
 export const _internals = { mergeAnswers, sanitizeExtracted };
-export { Types };

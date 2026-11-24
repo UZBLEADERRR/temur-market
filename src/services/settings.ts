@@ -5,7 +5,7 @@ import type { Lang } from '../utils/text';
 
 export type SettingsValues = Record<string, string | number | boolean>;
 
-/** Admin-editable settings stored in MongoDB with in-memory caching. */
+/** Admin-editable settings stored in PostgreSQL with in-memory caching. */
 export class SettingsService {
   private cache?: { values: SettingsValues; at: number };
   constructor(private readonly ttlMs = 5_000) {}

@@ -247,7 +247,7 @@ export function registerAdminHandlers(bot: Bot, app: AppContext): void {
   });
   admin.command('examples', async (ctx) => {
     const total = await StyleExample.countDocuments();
-    const sample = await StyleExample.aggregate<{ client: string; coach: string[] }>([{ $sample: { size: 3 } }]);
+    const sample = await StyleExample.sample(3);
     const s = sample.map((e) => `Mijoz: ${escapeHtml(truncate(e.client, 120))}\nMurabbiy: ${escapeHtml(e.coach.join(' / '))}`).join('\n\n');
     await reply(ctx, `📚 Namunalar: ${total}\n\n${s}`);
   });

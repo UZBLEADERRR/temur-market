@@ -7,7 +7,7 @@ import { GeminiClient } from '../ai/geminiClient';
 import { rebuildStyleProfile } from '../style/styleProfile';
 
 async function main() {
-  await connectDatabase(env.MONGODB_URI);
+  await connectDatabase(env.DATABASE_URL);
   const settings = new SettingsService();
   const ai = new AiService(
     new GeminiClient({ apiKey: env.LLM_API_KEY, model: env.LLM_MODEL, baseUrl: env.LLM_BASE_URL, timeoutMs: env.LLM_TIMEOUT_MS }),

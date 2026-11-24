@@ -1,5 +1,7 @@
-import mongoose from 'mongoose';
 import { afterAll, beforeAll, beforeEach } from 'vitest';
+import { connectDatabase, disconnectDatabase } from '../src/database/connection';
+import { getPool } from '../src/database/odm';
+import { TABLES } from '../src/database/schema';
 import type { InlineKeyboardMarkup } from 'grammy/types';
 import { SettingsService } from '../src/services/settings';
 import { AiService } from '../src/ai/aiService';
@@ -12,19 +14,18 @@ import type { SentRef, TelegramGateway } from '../src/telegram/gateway';
 import type { AppContext } from '../src/services/appContext';
 import { loadEnv } from '../src/config/env';
 
-export const TEST_URI = process.env.TEST_MONGODB_URI ?? 'mongodb://127.0.0.1:27017/temur_fit_test';
+export const TEST_URI = process.env.TEST_DATABASE_URL ?? 'postgres://postgres@127.0.0.1:5432/temur_fit_test';
 
 export function useDatabase() {
   beforeAll(async () => {
-    await mongoose.connect(TEST_URI, { serverSelectionTimeoutMS: 5000 });
-    await Promise.all(Object.values(mongoose.models).map((m) => m.syncIndexes()));
+    await connectDatabase(TEST_URI);
   });
   beforeEach(async () => {
-    const cols = await mongoose.connection.db!.collections();
-    await Promise.all(cols.map((c) => c.deleteMany({})));
+    // TRUNCATE ... CASCADE: bitta buyruqda, tartibga qaramasdan
+    await getPool().query(`TRUNCATE ${TABLES.map((t) => `"${t}"`).join(', ')} CASCADE`);
   });
   afterAll(async () => {
-    await mongoose.disconnect();
+    await disconnectDatabase();
   });
 }
 

@@ -1,22 +1,31 @@
 services:
-  mongo:
-    image: mongo:7
+  postgres:
+    image: postgres:16-alpine
     restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: temur_fit
     ports:
-      - "27017:27017"
+      - "5432:5432"
     volumes:
-      - mongo-data:/data/db
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   bot:
     build: .
     restart: unless-stopped
     env_file: .env
     environment:
-      MONGODB_URI: mongodb://mongo:27017/temur_fit
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/temur_fit
     ports:
       - "3000:3000"
     depends_on:
-      - mongo
+      postgres:
+        condition: service_healthy
 
 volumes:
-  mongo-data:
+  postgres-data:

@@ -1,83 +1,77 @@
-import { Schema, model, type InferSchemaType, type HydratedDocument } from 'mongoose';
-import { LEAD_MODES, LEAD_STATUSES } from '../../types/domain';
+import { defineModel, type Doc } from '../odm';
 
-const AnswersSchema = new Schema(
-  {
-    height: Number,
-    weight: Number,
-    age: Number,
-    trainingExperience: String,
-    goal: String,
-    targetWeight: Number,
-    trainingDays: Number,
-    trainingLocation: String,
-    previousAttempts: String,
-    healthProblems: String,
-  },
-  { _id: false },
-);
+export interface LeadAnswers {
+  height?: number;
+  weight?: number;
+  age?: number;
+  trainingExperience?: string;
+  goal?: string;
+  targetWeight?: number;
+  trainingDays?: number;
+  trainingLocation?: string;
+  previousAttempts?: string;
+  healthProblems?: string;
+}
 
 /**
- * One lead per client chat of the business account. It also holds the conversation state
- * (status / mode / current question / reminders) because the PDF treats them as one record.
+ * Biznes akkauntning har bir mijoz chati uchun bitta lead. Suhbat holati ham
+ * shu yerda (status / rejim / joriy savol / eslatmalar) — PDF ularni bitta
+ * yozuv deb qaraydi.
  */
-const LeadSchema = new Schema(
-  {
-    businessConnectionId: { type: String, required: true },
-    chatId: { type: Number, required: true },
-    telegramId: { type: Number, required: true, index: true },
-    username: String,
-    firstName: String,
-    lastName: String,
-    name: String,
-    language: { type: String, enum: ['uz', 'ru'], default: 'uz' },
-    /** Uzbek clients writing in Cyrillic get answers in Cyrillic. */
-    uzScript: { type: String, enum: ['latn', 'cyrl'], default: 'latn' },
+export interface LeadData {
+  businessConnectionId: string;
+  chatId: number;
+  telegramId: number;
+  username?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  name?: string | null;
+  language: 'uz' | 'ru';
+  /** Kirill yozuvida yozgan o'zbek mijozga kirillda javob beriladi. */
+  uzScript: 'latn' | 'cyrl';
 
-    source: { type: String, default: 'unknown', index: true },
-    sourceRaw: String,
+  source: string;
+  sourceRaw?: string | null;
 
-    answers: { type: AnswersSchema, default: () => ({}) },
-    bmi: Number,
-    targetBmi: Number,
-    currentQuestion: { type: Number, default: 1 },
-    /** asked = «kurs bo'yichami?» sent; course = lead; other = not a lead (handed to the coach silently). */
-    intent: { type: String, enum: ['asked', 'course', 'other'] },
-    /** Admin switch: AI keeps chatting with this client (also after the questionnaire / manual messages). */
-    alwaysOn: { type: Boolean, default: false },
-    lastAskedStep: Number,
-    askCount: { type: Number, default: 0 },
-    skippedSteps: { type: [Number], default: [] },
+  answers: LeadAnswers;
+  bmi?: number | null;
+  targetBmi?: number | null;
+  currentQuestion: number;
+  /** asked = «kurs bo'yichami?» yuborilgan; course = lead; other = lead emas. */
+  intent?: 'asked' | 'course' | 'other' | null;
+  /** Admin tugmasi: AI shu mijoz bilan gaplashishni davom etadi. */
+  alwaysOn: boolean;
+  lastAskedStep?: number | null;
+  askCount: number;
+  skippedSteps: number[];
 
-    status: { type: String, enum: LEAD_STATUSES, default: 'NEW', index: true },
-    mode: { type: String, enum: LEAD_MODES, default: 'AI' },
-    urgent: { type: Boolean, default: false },
-    readyReason: String,
+  status: string;
+  mode: 'AI' | 'MANUAL';
+  urgent: boolean;
+  readyReason?: string | null;
 
-    summary: String,
-    summaryMessageCount: { type: Number, default: 0 },
-    notes: String,
+  summary?: string | null;
+  summaryMessageCount: number;
+  notes?: string | null;
 
-    remindersSent: { type: Number, default: 0 },
-    pendingSince: Date,
-    aiFailures: { type: Number, default: 0 },
-    aiFailureNotifiedAt: Date,
+  remindersSent: number;
+  pendingSince?: Date | null;
+  aiFailures: number;
+  aiFailureNotifiedAt?: Date | null;
 
-    adminCardMessageIds: { type: [{ chatId: Number, messageId: Number }], default: [] },
+  adminCardMessageIds: Array<{ chatId: number; messageId: number }>;
 
-    lastClientMessageAt: Date,
-    lastOutgoingAt: Date,
-    readyAt: Date,
-    answeredAt: Date,
-    paidAt: Date,
-    rejectedAt: Date,
-  },
-  { timestamps: true, collection: 'leads' },
-);
+  lastClientMessageAt?: Date | null;
+  lastOutgoingAt?: Date | null;
+  readyAt?: Date | null;
+  answeredAt?: Date | null;
+  paidAt?: Date | null;
+  rejectedAt?: Date | null;
 
-LeadSchema.index({ businessConnectionId: 1, chatId: 1 }, { unique: true });
-LeadSchema.index({ status: 1, mode: 1, lastClientMessageAt: 1 });
+  createdAt: Date;
+  updatedAt: Date;
+}
 
-export type LeadData = InferSchemaType<typeof LeadSchema>;
-export type LeadDoc = HydratedDocument<LeadData>;
-export const Lead = model('Lead', LeadSchema);
+export type LeadDoc = Doc<LeadData>;
+
+export const Lead = defineModel<LeadData>('leads', { json: ['answers', 'adminCardMessageIds'] });
