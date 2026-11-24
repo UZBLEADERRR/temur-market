@@ -1,4 +1,3 @@
-import ExcelJS from 'exceljs';
 import { Lead } from '../database/models/Lead';
 import { displayName, statusLabel } from '../leads/leadCard';
 import { escapeHtml } from '../utils/text';
@@ -144,6 +143,10 @@ export async function exportRows(timeZone: string) {
 }
 
 export async function exportXlsx(timeZone: string): Promise<Buffer> {
+  // exceljs ~11 MB xotira oladi va u faqat shu yerda, /export buyrug'ida
+  // kerak. Yuqorida import qilinsa bot butun umri davomida o'sha xotirani
+  // ushlab turardi — eksport esa kuniga bir marta ham bo'lmaydi.
+  const { default: ExcelJS } = await import('exceljs');
   const wb = new ExcelJS.Workbook();
   wb.creator = 'TEMUR.FIT bot';
   const ws = wb.addWorksheet('Leadlar');

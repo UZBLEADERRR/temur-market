@@ -42,7 +42,8 @@ async function main() {
   registerAdminHandlers(bot, app);
 
   let runner: RunnerHandle | undefined;
-  const useWebhook = env.BOT_MODE === 'webhook' && Boolean(env.publicUrl);
+  // 'auto' — public URL bor bo'lsa webhook, bo'lmasa polling
+  const useWebhook = env.BOT_MODE !== 'polling' && Boolean(env.publicUrl);
   const web = createWebApp(app, (e) => {
     if (useWebhook) {
       e.post('/telegram/webhook', webhookCallback(bot, 'express', { secretToken: env.WEBHOOK_SECRET }));
@@ -87,10 +88,16 @@ async function main() {
     logger.info('Long polling mode (concurrent runner)');
   }
 
-  // background jobs: reminders + retry of AI failures / unfinished processing after restarts
+  // Fon ishlari: eslatmalar + AI xatolaridan keyin qayta urinish.
+  //
+  // Tiklar ataylab siyrak: eslatmalar ~1 soat va ~20 soatda yuboriladi,
+  // shuning uchun daqiqalik tekshiruvning ma'nosi yo'q. Har tik bazaga
+  // so'rov yuboradi va jarayonni uyg'otadi — bu esa xotira va CPU demak,
+  // Railway shunga pul oladi. 5 daqiqalik qadam hech narsani kechiktirmaydi.
+  const TICK = 5 * MINUTE;
   const jobs = [
-    setInterval(() => void reminders.tick().catch((err) => logger.error({ err: (err as Error).message }, 'Reminder tick failed')), MINUTE),
-    setInterval(() => void engine.retryPending().catch((err) => logger.error({ err: (err as Error).message }, 'Retry tick failed')), 2 * MINUTE),
+    setInterval(() => void reminders.tick().catch((err) => logger.error({ err: (err as Error).message }, 'Reminder tick failed')), TICK),
+    setInterval(() => void engine.retryPending().catch((err) => logger.error({ err: (err as Error).message }, 'Retry tick failed')), TICK),
   ];
 
   const shutdown = async (signal: string) => {

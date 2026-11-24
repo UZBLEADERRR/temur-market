@@ -9,6 +9,26 @@ Instagram video → chat link → Temurning akkaunti → AI: 5 savol → «Tushu
 
 Asosiy manba — texnik topshiriq (2-versiya) va system prompt v3.2. Prompt matnida murabbiy ismi `{{coach_name}}` (standart qiymati «Temur»).
 
+## Xarajat
+
+Railway xotira × vaqt uchun pul oladi va bot 24/7 turadi, shuning uchun
+sozlamalar tinch ishlashga qaratilgan:
+
+| Nima | Qanday |
+|---|---|
+| `BOT_MODE` | Standart `auto`: public URL bor bo'lsa **webhook**. Long polling Telegramga doimiy ochiq ulanish ushlab, 50 ta parallel ishlovchi bilan jarayonni bo'sh qoldirmasdi. Majburan: `BOT_MODE=polling` |
+| Fon tiklari | 5 daqiqada. Eslatmalar ~1 soat va ~20 soatda ketadi — daqiqalik tekshiruvning ma'nosi yo'q edi |
+| `exceljs` | Faqat `/export` chaqirilganda yuklanadi. Doim yuklansa 11 MB bekorga band turardi (83 → 73 MB) |
+
+**Baza.** Railway'da alohida MongoDB xizmati oyiga alohida pul yeydi.
+Lead anketasi juda kichik ma'lumot, shuning uchun MongoDB Atlas'ning
+bepul darajasi (M0) yetadi — `MONGODB_URI` ni o'shanga qaratish kifoya,
+kodda hech narsa o'zgarmaydi.
+
+> Xizmatlarni sanab ko'ring: bitta bot uchun bitta xizmat yetadi.
+> Railway'da tasodifan qolib ketgan ikkinchi deploy yoki bog'lanmagan
+> volume ham oyma-oy pul yeb turadi.
+
 ## Nima qila oladi
 
 | Imkoniyat | Qayerda |

@@ -30,7 +30,13 @@ const EnvSchema = z.object({
   PORT: z.coerce.number().default(3000),
   PUBLIC_URL: z.string().optional(),
   RAILWAY_PUBLIC_DOMAIN: z.string().optional(),
-  BOT_MODE: z.enum(['polling', 'webhook']).default('polling'),
+  /// Standart: public URL bo'lsa webhook.
+  ///
+  /// Long polling Telegramga doimiy ochiq ulanish ushlab turadi va 50 ta
+  /// parallel ishlovchi bilan jarayonni hech qachon bo'sh qoldirmaydi.
+  /// Webhook esa faqat xabar kelganda uyg'otadi — server xuddi shunday
+  /// 24/7 turadi, lekin ancha tinch. Majburan o'zgartirish: BOT_MODE=polling.
+  BOT_MODE: z.enum(['polling', 'webhook', 'auto']).default('auto'),
   WEBHOOK_SECRET: z.string().optional(),
   ADMIN_WEB_TOKEN: z.string().optional(),
   TZ_NAME: z.string().default('Asia/Tashkent'),
