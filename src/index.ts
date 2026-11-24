@@ -131,6 +131,11 @@ process.on('uncaughtException', (err) => {
 });
 
 main().catch((err) => {
-  logger.fatal({ err: (err as Error).message }, 'Fatal startup error');
+  // Sababni msg ning ichiga yozamiz: Railway log oynasi faqat msg ni
+  // ko'rsatadi, qo'shimcha maydonlarni ochish kerak bo'ladi. Shu sababli
+  // oldin konteyner qayta ishga tushib turardi, logda esa faqat
+  // "Fatal startup error" degan foydasiz qator ko'rinardi.
+  const message = err instanceof Error ? err.message : String(err);
+  logger.fatal({ err: message }, `Ishga tushmadi: ${message}`);
   process.exit(1);
 });

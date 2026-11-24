@@ -401,3 +401,36 @@ describe('odm — massiv ustunlar va turlar', () => {
     expect((await Lead.findById(lead._id).lean())!.name).toBe('Ali');
   });
 });
+
+describe('ulanish sozlamalari', () => {
+  it('TLS faqat tashqi bazalar uchun yoqiladi', async () => {
+    const { needsSsl } = await import('../src/database/connection');
+
+    // lokal va Railway ichki tarmog'i — TLS'siz
+    expect(needsSsl('postgres://postgres@127.0.0.1:5432/db')).toBe(false);
+    expect(needsSsl('postgres://u:p@localhost:5432/db')).toBe(false);
+    expect(needsSsl('postgres://u:p@postgres.railway.internal:5432/railway')).toBe(false);
+
+    // tashqi baza — TLS kerak
+    expect(needsSsl('postgres://u:p@ep-x.eu-central-1.aws.neon.tech/db')).toBe(true);
+    expect(needsSsl('postgres://u:p@tramway.proxy.rlwy.net:21345/railway')).toBe(true);
+
+    // aniq aytilgan bo'lsa, aytilganidek
+    expect(needsSsl('postgres://u:p@127.0.0.1:5432/db?sslmode=require')).toBe(true);
+    expect(needsSsl('postgres://u:p@host.example.com/db?sslmode=disable')).toBe(false);
+  });
+
+  it("Railway'da DATABASE_URL qo'yilmasa, nima qilish kerakligini aytadi", async () => {
+    const { connectDatabase } = await import('../src/database/connection');
+    const saved = process.env.RAILWAY_ENVIRONMENT;
+    process.env.RAILWAY_ENVIRONMENT = 'production';
+    try {
+      // standart (localhost) manzil + Railway = aniq xato, tushunarsiz
+      // "connect ECONNREFUSED" va qayta-qayta ishga tushish o'rniga
+      await expect(connectDatabase('postgres://postgres:postgres@127.0.0.1:5432/temur_fit')).rejects.toThrow(/DATABASE_URL qo'yilmagan/);
+    } finally {
+      if (saved === undefined) delete process.env.RAILWAY_ENVIRONMENT;
+      else process.env.RAILWAY_ENVIRONMENT = saved;
+    }
+  });
+});
